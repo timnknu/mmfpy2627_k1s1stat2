@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Двійкове додавання: Таблиця істинності та польоти бітів</title>
+<style>
+    :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --muted: #64748b;
+        --conductor: #7c3aed;
+        --lamp-gold: #f59e0b;
+        --carry-color: #8b5cf6;
+        --col-active: rgba(99, 102, 241, 0.12);
+        --tt-active: #fef08a;
+        --tt-border: #ca8a04;
+    }
+
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); user-select: none; }
+
+    /* Верхня панель */
+    .top-panel {
+        max-width: 1360px; margin: 0 auto 16px auto; background: var(--card-bg);
+        border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03); display: flex; flex-direction: column; gap: 10px;
+    }
+    .top-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+
+    .btn-group { display: flex; gap: 8px; align-items: center; }
+    button {
+        background: #0284c7; color: #fff; border: none; padding: 7px 15px;
+        border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;
+        transition: background 0.15s, transform 0.05s;
+    }
+    button:hover { background: #0369a1; }
+    button:active { transform: scale(0.98); }
+    button:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
+    button.secondary { background: #f1f5f9; color: var(--text); border: 1px solid var(--border); }
+    button.secondary:hover { background: #e2e8f0; }
+
+    /* Пресети та введення винесені нагору */
+    .presets-row {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        padding-top: 8px; border-top: 1px dashed var(--border); font-size: 12px;
+    }
+    .preset-btn {
+        background: #f1f5f9; color: var(--muted); border: 1px solid var(--border);
+        padding: 5px 10px; font-size: 11px; border-radius: 5px; cursor: pointer; font-weight: bold;
+    }
+    .preset-btn:hover { background: #e2e8f0; color: var(--text); }
+    .num-input {
+        width: 60px; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border);
+        font-family: monospace; font-size: 12px; font-weight: bold; text-align: center;
+    }
+
+    .step-badge { font-size: 12px; font-weight: bold; color: var(--muted); padding: 0 6px; }
+    .presenter-cue { font-size: 14px; font-weight: 600; color: var(--conductor); }
+
+    /* Основна сітка: Таблиця (ліворуч) та Дошка (праворуч) */
+    .stage {
+        max-width: 1360px; margin: 0 auto; display: grid;
+        grid-template-columns: 330px 1fr; gap: 16px;
+    }
+    @media (max-width: 1060px) {
+        .stage { grid-template-columns: 1fr; }
+    }
+
+    .card {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+        position: relative;
+    }
+    .card-title {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.8px; color: var(--muted); margin-bottom: 8px;
+    }
+
+    /* Таблиця істинності (Full Adder) */
+    .tt-table {
+        width: 100%; border-collapse: collapse; font-size: 12px; font-family: monospace; text-align: center;
+    }
+    .tt-table th, .tt-table td { border: 1px solid var(--border); padding: 5px 3px; }
+    .tt-table th { background: #f8fafc; color: var(--muted); font-size: 11px; }
+    .tt-table tr.tt-row-active {
+        background: var(--tt-active); font-weight: bold;
+        box-shadow: 0 0 10px rgba(234, 179, 8, 0.45);
+    }
+    .tt-table tr.tt-row-active td { border-color: var(--tt-border); }
+    .tt-cell-out { font-weight: bold; }
+
+    /* Дошка суматора: двовимірний CSS Grid */
+    .board-container { overflow-x: auto; }
+    .adder-grid {
+        display: grid;
+        grid-template-columns: 130px 42px repeat(8, minmax(38px, 1fr));
+        align-items: center;
+        min-width: 580px;
+    }
+
+    /* Клітинка сітки */
+    .grid-cell {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        padding: 6px 2px; transition: background 0.2s;
+    }
+    .grid-cell.col-focus {
+        background: var(--col-active);
+        box-shadow: inset 1px 0 0 rgba(99, 102, 241, 0.3), inset -1px 0 0 rgba(99, 102, 241, 0.3);
+    }
+
+    /* Підписи рядків зліва (стовпчик 1) */
+    .row-title-cell {
+        align-items: flex-start; font-size: 12px; font-weight: 700;
+        color: var(--text); padding-left: 6px; white-space: nowrap;
+    }
+
+    .col-header-text {
+        font-size: 11px; font-weight: bold; font-family: monospace;
+        color: var(--muted); text-align: center; line-height: 1.2;
+    }
+
+    /* Комірки переносів Cin */
+    .carry-cell {
+        width: 28px; height: 28px; border-radius: 50%; border: 1px dashed #cbd5e1;
+        display: flex; align-items: center; justify-content: center;
+        font-family: monospace; font-size: 11px; font-weight: bold; color: #94a3b8; background: #fff;
+        transition: all 0.25s;
+    }
+    .carry-cell.has-carry {
+        border: 2px solid var(--carry-color); background: #f3e8ff; color: var(--carry-color);
+        box-shadow: 0 0 10px rgba(139, 92, 246, 0.45); transform: scale(1.1);
+    }
+
+    /* Риска стовпчикового додавання */
+    .rule-sign-cell {
+        justify-content: center; align-items: flex-end; padding-right: 12px;
+    }
+    .plus-sign {
+        font-size: 24px; font-weight: 800; color: #0284c7; line-height: 1;
+    }
+    .rule-line-cell {
+        grid-column: 2 / -1; padding: 6px 0;
+    }
+    .addition-rule-line {
+        width: 100%; height: 3px; background: #94a3b8; border-radius: 2px;
+    }
+
+    /* Настільна лампа */
+    .lamp-unit { display: flex; flex-direction: column; align-items: center; width: 34px; }
+    .lamp-svg { width: 34px; height: 42px; overflow: visible; }
+    .lamp-idx { font-size: 9px; font-family: monospace; color: #94a3b8; margin-top: 2px; }
+
+    .lamp-glow { opacity: 0; transition: opacity 0.25s; filter: blur(3px); fill: var(--lamp-gold); }
+    .lamp-shade { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 1.5; transition: all 0.25s; }
+    .lamp-bulb { fill: #e2e8f0; transition: all 0.25s; }
+    .lamp-stem, .lamp-base { stroke: #64748b; stroke-width: 2; fill: #f8fafc; }
+    .lamp-cord { stroke: #94a3b8; stroke-width: 1.2; }
+
+    /* Увімкнений стан лампи */
+    .lit .lamp-glow { opacity: 0.85; }
+    .lit .lamp-shade { fill: #f59e0b; stroke: #d97706; }
+    .lit .lamp-bulb { fill: #fff; filter: drop-shadow(0 0 4px #fbbf24); }
+    .lit .lamp-unit { transform: translateY(-1px); }
+
+    /* Анімована кулька для польоту даних */
+    #flying-particle {
+        position: fixed; border-radius: 14px; padding: 2px 8px;
+        background: #fff; border: 2px solid var(--conductor); color: var(--conductor);
+        box-shadow: 0 0 14px var(--conductor); display: flex; align-items: center;
+        justify-content: center; font-size: 11px; font-weight: 800;
+        pointer-events: none; opacity: 0; z-index: 1000;
+    }
+</style>
+</head>
+<body>
+
+<div class="top-panel">
+    <!-- Верхній рядок керування -->
+    <div class="top-row">
+        <div class="btn-group">
+            <button class="secondary" onclick="stepBackward()">&lt; Назад</button>
+            <button id="next-btn" onclick="stepForward()">Наступний крок &gt;</button>
+            <button class="secondary" onclick="resetFrames()">Скинути</button>
+            <span class="step-badge" id="step-counter">Крок 0 / 33</span>
+        </div>
+        <div id="cue" class="presenter-cue">Готово. Натисніть «Наступний крок».</div>
+    </div>
+
+    <!-- Пресети та числа окремо нагорі -->
+    <div class="presets-row">
+        <span style="font-weight: bold; color: var(--muted);">Пресети:</span>
+        <button class="preset-btn" onclick="setPreset(35, 27)">35 + 27 (Класичний)</button>
+        <button class="preset-btn" onclick="setPreset(1, 1)">1 + 1 (Базовий перенос)</button>
+        <button class="preset-btn" onclick="setPreset(127, 1)">127 + 1 (Доміно-ефект!)</button>
+        <button class="preset-btn" onclick="setPreset(15, 15)">15 + 15 (4 переноси)</button>
+        <button class="preset-btn" onclick="setPreset(200, 100)">200 + 100 (Переповнення C8)</button>
+
+        <span style="margin-left: 12px; font-weight: bold; color: var(--muted);">Власні числа:</span>
+        <span>A:</span><input type="number" id="input-a" class="num-input" value="35" min="0" max="255">
+        <span>B:</span><input type="number" id="input-b" class="num-input" value="27" min="0" max="255">
+        <button class="secondary" style="padding: 4px 10px;" onclick="applyCustomNumbers()">Застосувати</button>
+    </div>
+</div>
+
+<div class="stage">
+    <!-- ЛІВА КОЛОНКА: ТАБЛИЦЯ ІСТИННОСТІ (FULL ADDER) -->
+    <div class="card" id="tt-card">
+        <div class="card-title" style="display: flex; justify-content: space-between;">
+            <span>Таблиця істинності (Full Adder)</span>
+            <span style="color: var(--conductor);">2³ = 8 станів</span>
+        </div>
+        <p style="font-size: 11px; color: var(--muted); margin-top: 0; margin-bottom: 8px;">
+            Сюди прилітають 3 біти розряду. Таблиця видає суму і біт переносу.
+        </p>
+
+        <table class="tt-table">
+            <thead>
+                <tr>
+                    <th colspan="3" style="background: #e0e7ff; color: #3730a3;">Входи розряду</th>
+                    <th style="width: 18px;"></th>
+                    <th colspan="2" style="background: #fef3c7; color: #92400e;">Виходи</th>
+                </tr>
+                <tr>
+                    <th title="Біт доданка A">A</th>
+                    <th title="Біт доданка B">B</th>
+                    <th title="Вхідний перенос">Cin</th>
+                    <th>→</th>
+                    <th title="Біт суми (летить у результат)" style="color: #0284c7;">Сума (S)</th>
+                    <th title="Вихідний перенос (летить ліворуч)" style="color: var(--carry-color);">Перенос (Cout)</th>
+                </tr>
+            </thead>
+            <tbody id="tt-body">
+                <tr id="tt-000"><td>0</td><td>0</td><td>0</td><td>→</td><td class="tt-cell-out" id="tt-000-s">0</td><td class="tt-cell-out" id="tt-000-c">0</td></tr>
+                <tr id="tt-001"><td>0</td><td>0</td><td>1</td><td>→</td><td class="tt-cell-out" id="tt-001-s">1</td><td class="tt-cell-out" id="tt-001-c">0</td></tr>
+                <tr id="tt-010"><td>0</td><td>1</td><td>0</td><td>→</td><td class="tt-cell-out" id="tt-010-s">1</td><td class="tt-cell-out" id="tt-010-c">0</td></tr>
+                <tr id="tt-011"><td>0</td><td>1</td><td>1</td><td>→</td><td class="tt-cell-out" id="tt-011-s">0</td><td class="tt-cell-out" id="tt-011-c">1</td></tr>
+                <tr id="tt-100"><td>1</td><td>0</td><td>0</td><td>→</td><td class="tt-cell-out" id="tt-100-s">1</td><td class="tt-cell-out" id="tt-100-c">0</td></tr>
+                <tr id="tt-101"><td>1</td><td>0</td><td>1</td><td>→</td><td class="tt-cell-out" id="tt-101-s">0</td><td class="tt-cell-out" id="tt-101-c">1</td></tr>
+                <tr id="tt-110"><td>1</td><td>1</td><td>0</td><td>→</td><td class="tt-cell-out" id="tt-110-s">0</td><td class="tt-cell-out" id="tt-110-c">1</td></tr>
+                <tr id="tt-111"><td>1</td><td>1</td><td>1</td><td>→</td><td class="tt-cell-out" id="tt-111-s">1</td><td class="tt-cell-out" id="tt-111-c">1</td></tr>
+            </tbody>
+        </table>
+
+        <div id="tt-summary" style="margin-top: 10px; font-size: 11px; font-family: monospace; background: #f8fafc; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); text-align: center;">
+            Очікування першого розряду...
+        </div>
+    </div>
+
+    <!-- ПРАВА КОЛОНКА: АПАРАТНЕ ПОЛЕ ЛАМП НА СУВОРОМУ CSS GRID -->
+    <div class="card board-container">
+        <div class="card-title" style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span>8-бітний паралельний суматор на лампах</span>
+            <span style="color: var(--muted); font-size: 10px;">Справа наліво: від 2⁰ до 2⁷</span>
+        </div>
+
+        <div class="adder-grid" id="main-adder-grid">
+            <!-- Збирається динамічно функцією buildGridStructure() -->
+        </div>
+    </div>
+</div>
+
+<div id="flying-particle"></div>
+
+<script>
+let valA = 35;
+let valB = 27;
+
+function createLampSVG(id, label) {
+    return `
+    <div class="lamp-unit" id="lunit-${id}">
+        <svg class="lamp-svg" viewBox="0 0 34 42">
+            <circle class="lamp-glow" cx="17" cy="16" r="14" />
+            <ellipse class="lamp-base" cx="17" cy="38" rx="13" ry="2.5" />
+            <line class="lamp-stem" x1="17" y1="38" x2="17" y2="16" />
+            <line class="lamp-cord" x1="21" y1="18" x2="21" y2="25" />
+            <circle cx="21" cy="25" r="1.3" fill="#64748b" />
+            <circle class="lamp-bulb" cx="17" cy="16" r="3.2" />
+            <polygon class="lamp-shade" points="10,5 24,5 30,18 4,18" />
+        </svg>
+        <span class="lamp-idx">${label}</span>
+    </div>`;
+}
+
+// Побудова надійного CSS Grid для суматора
+function buildGridStructure() {
+    const grid = document.getElementById('main-adder-grid');
+    grid.innerHTML = '';
+
+    // РЯДОК 1: Заголовки розрядів
+    grid.innerHTML += `<div class="grid-cell row-title-cell" style="color: var(--muted);">Розряди:</div>`;
+    grid.innerHTML += `<div class="grid-cell col-header-text" style="color: var(--carry-color);">C8</div>`;
+    for (let p = 7; p >= 0; p--) {
+        grid.innerHTML += `
+            <div class="grid-cell col-cell-${p} col-header-text">
+                2<sup>${p}</sup><br><span style="font-size: 9px; font-weight: normal; color: #94a3b8;">(${Math.pow(2, p)})</span>
+            </div>`;
+    }
+
+    // РЯДОК 2: Переноси Cin
+    grid.innerHTML += `<div class="grid-cell row-title-cell" style="color: var(--carry-color);">Переноси (Cin):</div>`;
+    grid.innerHTML += `<div class="grid-cell"><div id="carry-cell-8" class="carry-cell" title="Переповнення C8">0</div></div>`;
+    for (let p = 7; p >= 0; p--) {
+        grid.innerHTML += `<div class="grid-cell col-cell-${p}"><div id="carry-cell-${p}" class="carry-cell">0</div></div>`;
+    }
+
+    // РЯДОК 3: 1. Доданок A
+    grid.innerHTML += `<div class="grid-cell row-title-cell">1. Доданок A:</div>`;
+    grid.innerHTML += `<div class="grid-cell"></div>`; // під C8 пусто
+    for (let p = 7; p >= 0; p--) {
+        grid.innerHTML += `<div class="grid-cell col-cell-${p}" id="box-a-${p}">${createLampSVG(`a-${p}`, `A${p}`)}</div>`;
+    }
+
+    // РЯДОК 4: 2. Доданок B
+    grid.innerHTML += `<div class="grid-cell row-title-cell">2. Доданок B:</div>`;
+    grid.innerHTML += `<div class="grid-cell"></div>`; // під C8 пусто
+    for (let p = 7; p >= 0; p--) {
+        grid.innerHTML += `<div class="grid-cell col-cell-${p}" id="box-b-${p}">${createLampSVG(`b-${p}`, `B${p}`)}</div>`;
+    }
+
+    // РЯДОК 5: Риска додавання зі знаком '+'
+    grid.innerHTML += `
+        <div class="grid-cell rule-sign-cell"><span class="plus-sign">+</span></div>
+        <div class="grid-cell rule-line-cell"><div class="addition-rule-line"></div></div>
+    `;
+
+    // РЯДОК 6: 3. Результат (Сума)
+    grid.innerHTML += `<div class="grid-cell row-title-cell" style="color: #0284c7;">3. Результат (S):</div>`;
+    grid.innerHTML += `<div class="grid-cell"></div>`; // під C8 пусто
+    for (let p = 7; p >= 0; p--) {
+        grid.innerHTML += `<div class="grid-cell col-cell-${p}" id="box-res-${p}">${createLampSVG(`res-${p}`, `S${p}`)}</div>`;
+    }
+}
+buildGridStructure();
+
+// Безпечна анімація польоту частинки
+function fly(fromId, toId, text, color, cb) {
+    const fromEl = document.getElementById(fromId);
+    const toEl = document.getElementById(toId);
+    if (!fromEl || !toEl) { if (cb) cb(); return; }
+
+    const from = fromEl.getBoundingClientRect();
+    const to = toEl.getBoundingClientRect();
+    const p = document.getElementById('flying-particle');
+
+    p.style.transition = 'none';
+    p.textContent = text;
+    p.style.borderColor = color || 'var(--conductor)';
+    p.style.color = color || 'var(--conductor)';
+    p.style.boxShadow = `0 0 14px ${color || 'var(--conductor)'}`;
+    p.style.left = `${from.left + from.width/2 - 16}px`;
+    p.style.top = `${from.top + from.height/2 - 12}px`;
+    p.style.opacity = '1';
+    p.style.transform = 'scale(1.2)';
+
+    void p.offsetWidth; // force reflow
+
+    setTimeout(() => {
+        p.style.transition = 'top 0.46s cubic-bezier(0.2, 0.8, 0.2, 1), left 0.46s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.46s ease';
+        p.style.left = `${to.left + to.width/2 - 16}px`;
+        p.style.top = `${to.top + to.height/2 - 12}px`;
+        p.style.transform = 'scale(1)';
+    }, 35);
+
+    setTimeout(() => {
+        p.style.transition = 'opacity 0.15s';
+        p.style.opacity = '0';
+        if (cb) cb();
+    }, 520);
+}
+
+// Генератор кадрів додавання
+function buildFrames(a, b) {
+    const frames = [];
+    const binA = a.toString(2).padStart(8, '0');
+    const binB = b.toString(2).padStart(8, '0');
+
+    const activeA = binA.split('').map((bit, idx) => bit === '1' ? 7 - idx : null).filter(x => x !== null);
+    const activeB = binB.split('').map((bit, idx) => bit === '1' ? 7 - idx : null).filter(x => x !== null);
+    const currentResLamps = [];
+    const currentCarries = Array(9).fill(0);
+
+    // 0: Початок
+    frames.push({
+        col: null,
+        activeLampsA: [...activeA],
+        activeLampsB: [...activeB],
+        resLamps: [],
+        carries: [...currentCarries],
+        ttRow: null,
+        ttSummary: "Очікування першого розряду...",
+        fly: null,
+        cue: `Початок: Додаємо числа A = ${a} (${binA}₂) та B = ${b} (${binB}₂). Стартуємо з розряду 2⁰ (наймолодшого справа).`
+    });
+
+    let currentCarry = 0;
+
+    for (let p = 0; p <= 7; p++) {
+        const bitA = parseInt(binA[7 - p], 10);
+        const bitB = parseInt(binB[7 - p], 10);
+        const cin = currentCarry;
+        const total = bitA + bitB + cin;
+        const sumBit = total % 2;
+        const cout = Math.floor(total / 2);
+        const rowId = `tt-${bitA}${bitB}${cin}`;
+
+        // Крок 1: Фокус на стовпчику 2^p
+        frames.push({
+            col: p,
+            activeLampsA: [...activeA],
+            activeLampsB: [...activeB],
+            resLamps: [...currentResLamps],
+            carries: [...currentCarries],
+            ttRow: null,
+            ttSummary: `Розряд 2^${p}: Входи: A=${bitA}, B=${bitB}, Cin=${cin}`,
+            fly: null,
+            cue: `Розряд 2^${p}: Зчитуємо входи (A=${bitA}, B=${bitB}, вхідний перенос Cin=${cin}).`
+        });
+
+        // Крок 2: Біти ЛЕТЯТЬ У ТАБЛИЦЮ ІСТИННОСТІ
+        frames.push({
+            col: p,
+            activeLampsA: [...activeA],
+            activeLampsB: [...activeB],
+            resLamps: [...currentResLamps],
+            carries: [...currentCarries],
+            ttRow: rowId,
+            ttSummary: `Рядок [${bitA}, ${bitB}, ${cin}] -> Сума=${sumBit}, Cout=${cout}`,
+            fly: { from: `carry-cell-${p}`, to: rowId, text: `${bitA},${bitB},${cin}`, color: '#0284c7' },
+            cue: `Біти летять у таблицю істинності! Знайдено рядок (${bitA}, ${bitB}, ${cin}) -> Сума=${sumBit}, Перенос=${cout}.`
+        });
+
+        // Крок 3: Біт суми S ЛЕТИТЬ НАЗАД У ЛАМПУ РЕЗУЛЬТАТУ
+        if (sumBit === 1) {
+            currentResLamps.push(p);
+        }
+        frames.push({
+            col: p,
+            activeLampsA: [...activeA],
+            activeLampsB: [...activeB],
+            resLamps: [...currentResLamps],
+            carries: [...currentCarries],
+            ttRow: rowId,
+            ttSummary: `Запис суми S${p} = ${sumBit} у результат`,
+            fly: { from: `${rowId}-s`, to: `lunit-res-${p}`, text: `S=${sumBit}`, color: '#0284c7' },
+            cue: `Із таблиці біт суми S=${sumBit} летить назад до лампи результату S${p} (лампа ${sumBit===1 ? 'УВІМК' : 'ВИМК'}).`
+        });
+
+        // Крок 4 (якщо Cout == 1): Біт переносу ЛЕТИТЬ З ТАБЛИЦІ У НАСТУПНИЙ СТОВПЧИК
+        if (cout === 1) {
+            const nextCol = p + 1;
+            frames.push({
+                col: p,
+                activeLampsA: [...activeA],
+                activeLampsB: [...activeB],
+                resLamps: [...currentResLamps],
+                carries: [...currentCarries],
+                ttRow: rowId,
+                ttSummary: `ПЕРЕНОС Cout=1 летить у розряд 2^${nextCol}!`,
+                fly: { from: `${rowId}-c`, to: `carry-cell-${nextCol}`, text: '+1', color: 'var(--carry-color)' },
+                cue: `Із таблиці виходить перенос Cout=1! Кулька (+1) летить ліворуч у комірку Cin наступного розряду 2^${nextCol}!`
+            });
+            currentCarries[nextCol] = 1;
+            currentCarry = 1;
+        } else {
+            currentCarry = 0;
+        }
+    }
+
+    // Завершення
+    const totalSum = a + b;
+    frames.push({
+        col: null,
+        activeLampsA: [...activeA],
+        activeLampsB: [...activeB],
+        resLamps: [...currentResLamps],
+        carries: [...currentCarries],
+        ttRow: null,
+        ttSummary: `Результат: ${a} + ${b} = ${totalSum}`,
+        fly: null,
+        cue: `Додавання завершено! У лампах результату отримано суму ${totalSum} (${(totalSum % 256).toString(2).padStart(8, '0')}₂)${totalSum > 255 ? ' [ПЕРЕПОВНЕННЯ C8!]' : ''}.`
+    });
+
+    return frames;
+}
+
+let frames = buildFrames(valA, valB);
+let curIdx = 0;
+
+function renderFrame(idx) {
+    const f = frames[idx];
+
+    // 1. Підсвітка активного вертикального стовпчика через клас .col-focus
+    for (let p = 0; p <= 7; p++) {
+        const cells = document.querySelectorAll(`.col-cell-${p}`);
+        cells.forEach(c => {
+            if (f.col === p) c.classList.add('col-focus');
+            else c.classList.remove('col-focus');
+        });
+    }
+
+    // 2. Рядок у таблиці істинності
+    document.querySelectorAll('.tt-table tr').forEach(tr => tr.classList.remove('tt-row-active'));
+    if (f.ttRow) {
+        const tr = document.getElementById(f.ttRow);
+        if (tr) tr.classList.add('tt-row-active');
+    }
+    document.getElementById('tt-summary').textContent = f.ttSummary;
+
+    // 3. Лампи A
+    for (let p = 0; p <= 7; p++) {
+        const el = document.getElementById(`lunit-a-${p}`);
+        if (f.activeLampsA.includes(p)) el.classList.add('lit');
+        else el.classList.remove('lit');
+    }
+
+    // 4. Лампи B
+    for (let p = 0; p <= 7; p++) {
+        const el = document.getElementById(`lunit-b-${p}`);
+        if (f.activeLampsB.includes(p)) el.classList.add('lit');
+        else el.classList.remove('lit');
+    }
+
+    // 5. Лампи результату (Сума)
+    for (let p = 0; p <= 7; p++) {
+        const el = document.getElementById(`lunit-res-${p}`);
+        if (f.resLamps.includes(p)) el.classList.add('lit');
+        else el.classList.remove('lit');
+    }
+
+    // 6. Комірки переносів
+    for (let c = 0; c <= 8; c++) {
+        const cell = document.getElementById(`carry-cell-${c}`);
+        if (cell) {
+            if (f.carries[c] === 1) {
+                cell.textContent = '1';
+                cell.classList.add('has-carry');
+            } else {
+                cell.textContent = '0';
+                cell.classList.remove('has-carry');
+            }
+        }
+    }
+
+    // 7. Підказка та лічильник
+    document.getElementById('cue').textContent = f.cue;
+    document.getElementById('step-counter').textContent = `Крок ${idx} / ${frames.length - 1}`;
+    document.getElementById('next-btn').disabled = (idx >= frames.length - 1);
+
+    // 8. Анімація польоту
+    if (f.fly) {
+        fly(f.fly.from, f.fly.to, f.fly.text, f.fly.color);
+    }
+}
+
+function stepForward() {
+    if (curIdx < frames.length - 1) {
+        curIdx++;
+        renderFrame(curIdx);
+    }
+}
+
+function stepBackward() {
+    if (curIdx > 0) {
+        curIdx--;
+        renderFrame(curIdx);
+    }
+}
+
+function resetFrames() {
+    curIdx = 0;
+    renderFrame(0);
+}
+
+function applyCustomNumbers() {
+    const rawA = parseInt(document.getElementById('input-a').value, 10);
+    const rawB = parseInt(document.getElementById('input-b').value, 10);
+    if (isNaN(rawA) || isNaN(rawB)) return;
+
+    valA = Math.max(0, Math.min(255, rawA));
+    valB = Math.max(0, Math.min(255, rawB));
+
+    frames = buildFrames(valA, valB);
+    curIdx = 0;
+    renderFrame(0);
+}
+
+function setPreset(a, b) {
+    document.getElementById('input-a').value = a;
+    document.getElementById('input-b').value = b;
+    applyCustomNumbers();
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault();
+        stepForward();
+    } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        stepBackward();
+    }
+});
+
+renderFrame(0);
+</script>
+
+</body>
+</html>

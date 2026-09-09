@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Десяткове додавання у стовпчик: Калькулятор розряду та переноси</title>
+<style>
+    :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --muted: #64748b;
+        --conductor: #7c3aed;
+        --carry-color: #8b5cf6;
+        --col-active: rgba(99, 102, 241, 0.12);
+        --calc-active: #fef08a;
+    }
+
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); user-select: none; }
+
+    /* Верхня панель */
+    .top-panel {
+        max-width: 1360px; margin: 0 auto 16px auto; background: var(--card-bg);
+        border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03); display: flex; flex-direction: column; gap: 10px;
+    }
+    .top-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+
+    .btn-group { display: flex; gap: 8px; align-items: center; }
+    button {
+        background: #0284c7; color: #fff; border: none; padding: 7px 15px;
+        border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;
+        transition: background 0.15s, transform 0.05s;
+    }
+    button:hover { background: #0369a1; }
+    button:active { transform: scale(0.98); }
+    button:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
+    button.secondary { background: #f1f5f9; color: var(--text); border: 1px solid var(--border); }
+    button.secondary:hover { background: #e2e8f0; }
+
+    /* Пресети та введення винесені нагору */
+    .presets-row {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        padding-top: 8px; border-top: 1px dashed var(--border); font-size: 12px;
+    }
+    .preset-btn {
+        background: #f1f5f9; color: var(--muted); border: 1px solid var(--border);
+        padding: 5px 10px; font-size: 11px; border-radius: 5px; cursor: pointer; font-weight: bold;
+    }
+    .preset-btn:hover { background: #e2e8f0; color: var(--text); }
+    .num-input {
+        width: 75px; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border);
+        font-family: monospace; font-size: 12px; font-weight: bold; text-align: center;
+    }
+
+    .step-badge { font-size: 12px; font-weight: bold; color: var(--muted); padding: 0 6px; }
+    .presenter-cue { font-size: 14px; font-weight: 600; color: var(--conductor); }
+
+    /* Основна сітка */
+    .stage {
+        max-width: 1360px; margin: 0 auto; display: grid;
+        grid-template-columns: 360px 1fr; gap: 16px;
+    }
+    @media (max-width: 1060px) {
+        .stage { grid-template-columns: 1fr; }
+    }
+
+    .card {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+        position: relative;
+    }
+    .card-title {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.8px; color: var(--muted); margin-bottom: 8px;
+    }
+
+    /* Блок калькулятора одного розряду (ліворуч) */
+    .calc-chassis {
+        border: 2px solid var(--conductor); border-radius: 10px; padding: 14px;
+        background: #faf5ff; display: flex; flex-direction: column; gap: 12px;
+    }
+    .calc-section-title {
+        font-size: 11px; font-weight: 800; color: var(--conductor); text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    /* 3 вхідні слоти */
+    .calc-inputs-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+    .calc-slot {
+        background: #fff; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 8px 4px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .calc-slot-label { font-size: 10px; font-weight: bold; color: var(--muted); margin-bottom: 4px; }
+    .calc-slot-val { font-size: 20px; font-weight: 800; font-family: monospace; color: var(--text); }
+
+    /* Формула посередині */
+    .calc-equation-box {
+        background: #fff; border: 1px dashed #d8b4fe; border-radius: 6px; padding: 8px;
+        text-align: center; font-family: monospace; font-size: 14px; font-weight: bold; color: var(--conductor);
+    }
+
+    /* 2 вихідні слоти */
+    .calc-outputs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center; }
+    .calc-out-slot {
+        background: #fff; border-radius: 8px; padding: 8px 6px; display: flex;
+        flex-direction: column; align-items: center; justify-content: center;
+    }
+    .out-sum { border: 2px solid #0284c7; }
+    .out-carry { border: 2px solid var(--carry-color); }
+
+    /* Дошка суматора (праворуч) */
+    .board-container { overflow-x: auto; }
+    .adder-grid {
+        display: grid;
+        grid-template-columns: 140px 50px repeat(4, minmax(70px, 1fr));
+        align-items: center;
+        min-width: 520px;
+    }
+
+    .grid-cell {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        padding: 6px 2px; transition: background 0.2s;
+    }
+    .grid-cell.col-focus {
+        background: var(--col-active);
+        box-shadow: inset 1px 0 0 rgba(99, 102, 241, 0.3), inset -1px 0 0 rgba(99, 102, 241, 0.3);
+    }
+
+    .row-title-cell {
+        align-items: flex-start; font-size: 12px; font-weight: 700;
+        color: var(--text); padding-left: 6px; white-space: nowrap;
+    }
+    .col-header-text {
+        font-size: 11px; font-weight: bold; font-family: monospace;
+        color: var(--muted); text-align: center; line-height: 1.3;
+    }
+
+    /* Комірки переносів Cin */
+    .carry-cell {
+        width: 32px; height: 32px; border-radius: 50%; border: 1px dashed #cbd5e1;
+        display: flex; align-items: center; justify-content: center;
+        font-family: monospace; font-size: 12px; font-weight: bold; color: #94a3b8; background: #fff;
+        transition: all 0.25s;
+    }
+    .carry-cell.has-carry {
+        border: 2px solid var(--carry-color); background: #f3e8ff; color: var(--carry-color);
+        box-shadow: 0 0 10px rgba(139, 92, 246, 0.45); transform: scale(1.1);
+    }
+
+    /* Картка десяткової цифри */
+    .digit-card {
+        width: 52px; height: 52px; border-radius: 8px; border: 2px solid #cbd5e1;
+        background: #ffffff; display: flex; align-items: center; justify-content: center;
+        font-size: 24px; font-weight: 800; font-family: monospace; color: var(--text);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04); transition: all 0.2s;
+    }
+    .digit-card.zero-dim { color: #cbd5e1; }
+    .digit-card.res-card { border-color: #0284c7; background: #f0f9ff; color: #0284c7; }
+
+    /* Риска додавання */
+    .rule-sign-cell { justify-content: center; align-items: flex-end; padding-right: 14px; }
+    .plus-sign { font-size: 26px; font-weight: 800; color: #0284c7; line-height: 1; }
+    .rule-line-cell { grid-column: 2 / -1; padding: 6px 0; }
+    .addition-rule-line { width: 100%; height: 3px; background: #94a3b8; border-radius: 2px; }
+
+    /* Анімована кулька для польоту даних */
+    #flying-particle {
+        position: fixed; border-radius: 14px; padding: 2px 8px;
+        background: #fff; border: 2px solid var(--conductor); color: var(--conductor);
+        box-shadow: 0 0 14px var(--conductor); display: flex; align-items: center;
+        justify-content: center; font-size: 12px; font-weight: 800;
+        pointer-events: none; opacity: 0; z-index: 1000;
+    }
+</style>
+</head>
+<body>
+
+<div class="top-panel">
+    <!-- Верхній рядок керування -->
+    <div class="top-row">
+        <div class="btn-group">
+            <button class="secondary" onclick="stepBackward()">&lt; Назад</button>
+            <button id="next-btn" onclick="stepForward()">Наступний крок &gt;</button>
+            <button class="secondary" onclick="resetFrames()">Скинути</button>
+            <span class="step-badge" id="step-counter">Крок 0 / 21</span>
+        </div>
+        <div id="cue" class="presenter-cue">Готово. Натисніть «Наступний крок».</div>
+    </div>
+
+    <!-- Пресети та числа окремо нагорі -->
+    <div class="presets-row">
+        <span style="font-weight: bold; color: var(--muted);">Пресети:</span>
+        <button class="preset-btn" onclick="setPreset(478, 365)">478 + 365 (Подвійний перенос)</button>
+        <button class="preset-btn" onclick="setPreset(54, 28)">54 + 28 (Базовий)</button>
+        <button class="preset-btn" onclick="setPreset(999, 1)">999 + 1 (Доміно-ефект!)</button>
+        <button class="preset-btn" onclick="setPreset(7500, 4800)">7500 + 4800 (Переповнення C4)</button>
+        <button class="preset-btn" onclick="setPreset(234, 542)">234 + 542 (Без переносів)</button>
+
+        <span style="margin-left: 12px; font-weight: bold; color: var(--muted);">Власні числа (до 9999):</span>
+        <span>A:</span><input type="number" id="input-a" class="num-input" value="478" min="0" max="9999">
+        <span>B:</span><input type="number" id="input-b" class="num-input" value="365" min="0" max="9999">
+        <button class="secondary" style="padding: 4px 10px;" onclick="applyCustomNumbers()">Застосувати</button>
+    </div>
+</div>
+
+<div class="stage">
+    <!-- ЛІВА КОЛОНКА: КАЛЬКУЛЯТОР ОДНОГО РОЗРЯДУ -->
+    <div class="card" id="calc-card">
+        <div class="card-title" style="display: flex; justify-content: space-between;">
+            <span>Калькулятор одного розряду</span>
+            <span style="color: var(--conductor);">Основа 10</span>
+        </div>
+        <p style="font-size: 11px; color: var(--muted); margin-top: 0; margin-bottom: 10px;">
+            Сюди прилітають цифри стовпчика. Калькулятор рахує суму та визначає перенос у наступний розряд.
+        </p>
+
+        <div class="calc-chassis">
+            <!-- 1. ТРИ ВХІДНІ СЛОТИ -->
+            <div class="calc-section-title">Входи розряду (прилітають зі стовпчика)</div>
+            <div class="calc-inputs-row">
+                <div class="calc-slot" id="slot-in-a">
+                    <div class="calc-slot-label">Цифра A</div>
+                    <div class="calc-slot-val" id="val-in-a">--</div>
+                </div>
+                <div class="calc-slot" id="slot-in-b">
+                    <div class="calc-slot-label">Цифра B</div>
+                    <div class="calc-slot-val" id="val-in-b">--</div>
+                </div>
+                <div class="calc-slot" id="slot-in-cin" style="border-color: var(--carry-color);">
+                    <div class="calc-slot-label" style="color: var(--carry-color);">Перенос (Cin)</div>
+                    <div class="calc-slot-val" id="val-in-cin" style="color: var(--carry-color);">--</div>
+                </div>
+            </div>
+
+            <!-- 2. ОБЧИСЛЕННЯ СУМИ -->
+            <div class="calc-equation-box" id="calc-equation">
+                Очікування цифр розряду...
+            </div>
+
+            <!-- 3. ДВА ВИХІДНІ СЛОТИ -->
+            <div class="calc-section-title" style="margin-top: 2px;">Виходи калькулятора (летять назад)</div>
+            <div class="calc-outputs-row">
+                <!-- Одиниці суми -->
+                <div class="calc-out-slot out-sum" id="slot-out-s">
+                    <div class="calc-slot-label" style="color: #0284c7;">Сума в розряд (S)</div>
+                    <div class="calc-slot-val" id="val-out-s" style="color: #0284c7;">--</div>
+                    <div style="font-size: 9px; color: var(--muted); margin-top: 2px;">Сума mod 10</div>
+                </div>
+                <!-- Перенос у наступний розряд -->
+                <div class="calc-out-slot out-carry" id="slot-out-c">
+                    <div class="calc-slot-label" style="color: var(--carry-color);">Перенос (Cout)</div>
+                    <div class="calc-slot-val" id="val-out-c" style="color: var(--carry-color);">--</div>
+                    <div style="font-size: 9px; color: var(--muted); margin-top: 2px;">Сума div 10</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ПРАВА КОЛОНКА: АПАРАТНЕ ПОЛЕ ДЕСЯТКОВИХ РОЗРЯДІВ -->
+    <div class="card board-container">
+        <div class="card-title" style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span>Десяткове додавання на картках розрядів</span>
+            <span style="color: var(--muted); font-size: 10px;">Справа наліво: від 10⁰ до 10³</span>
+        </div>
+
+        <div class="adder-grid" id="main-adder-grid">
+            <!-- Генерується функцією buildGridStructure() -->
+        </div>
+    </div>
+</div>
+
+<div id="flying-particle"></div>
+
+<script>
+let valA = 478;
+let valB = 365;
+
+// Побудова сітки стовпчикового додавання
+function buildGridStructure() {
+    const grid = document.getElementById('main-adder-grid');
+    grid.innerHTML = '';
+
+    // РЯДОК 1: Заголовки розрядів (10^3 .. 10^0)
+    grid.innerHTML += `<div class="grid-cell row-title-cell" style="color: var(--muted);">Розряди:</div>`;
+    grid.innerHTML += `<div class="grid-cell col-header-text" style="color: var(--carry-color);">C4<br><span style="font-size: 9px; color: #94a3b8;">(10000)</span></div>`;
+    for (let p = 3; p >= 0; p--) {
+        grid.innerHTML += `
+            <div class="grid-cell col-cell-${p} col-header-text">
+                10<sup>${p}</sup><br><span style="font-size: 9px; font-weight: normal; color: #94a3b8;">(${Math.pow(10, p)})</span>
+            </div>`;
+    }
+
+    // РЯДОК 2: Переноси Cin
+    grid.innerHTML += `<div class="grid-cell row-title-cell" style="color: var(--carry-color);">Переноси (Cin):</div>`;
+    grid.innerHTML += `<div class="grid-cell"><div id="carry-cell-4" class="carry-cell" title="Переповнення 10^4">0</div></div>`;
+    for (let p = 3; p >= 0; p--) {
+        grid.innerHTML += `<div class="grid-cell col-cell-${p}"><div id="carry-cell-${p}" class="carry-cell">0</div></div>`;
+    }
+
+    // РЯДОК 3: 1. Доданок A
+    grid.innerHTML += `<div class="grid-cell row-title-cell">1. Доданок A:</div>`;
+    grid.innerHTML += `<div class="grid-cell"></div>`;
+    for (let p = 3; p >= 0; p--) {
+        grid.innerHTML += `<div class="grid-cell col-cell-${p}"><div id="card-a-${p}" class="digit-card">0</div></div>`;
+    }
+
+    // РЯДОК 4: 2. Доданок B
+    grid.innerHTML += `<div class="grid-cell row-title-cell">2. Доданок B:</div>`;
+    grid.innerHTML += `<div class="grid-cell"></div>`;
+    for (let p = 3; p >= 0; p--) {
+        grid.innerHTML += `<div class="grid-cell col-cell-${p}"><div id="card-b-${p}" class="digit-card">0</div></div>`;
+    }
+
+    // РЯДОК 5: Риска додавання зі знаком '+'
+    grid.innerHTML += `
+        <div class="grid-cell rule-sign-cell"><span class="plus-sign">+</span></div>
+        <div class="grid-cell rule-line-cell"><div class="addition-rule-line"></div></div>
+    `;
+
+    // РЯДОК 6: 3. Результат (S)
+    grid.innerHTML += `<div class="grid-cell row-title-cell" style="color: #0284c7;">3. Результат (S):</div>`;
+    grid.innerHTML += `<div class="grid-cell"></div>`;
+    for (let p = 3; p >= 0; p--) {
+        grid.innerHTML += `<div class="grid-cell col-cell-${p}"><div id="card-res-${p}" class="digit-card res-card zero-dim">0</div></div>`;
+    }
+}
+buildGridStructure();
+
+// Безпечна анімація польоту
+function fly(fromId, toId, text, color, cb) {
+    const fromEl = document.getElementById(fromId);
+    const toEl = document.getElementById(toId);
+    if (!fromEl || !toEl) { if (cb) cb(); return; }
+
+    const from = fromEl.getBoundingClientRect();
+    const to = toEl.getBoundingClientRect();
+    const p = document.getElementById('flying-particle');
+
+    p.style.transition = 'none';
+    p.textContent = text;
+    p.style.borderColor = color || 'var(--conductor)';
+    p.style.color = color || 'var(--conductor)';
+    p.style.boxShadow = `0 0 14px ${color || 'var(--conductor)'}`;
+    p.style.left = `${from.left + from.width/2 - 16}px`;
+    p.style.top = `${from.top + from.height/2 - 12}px`;
+    p.style.opacity = '1';
+    p.style.transform = 'scale(1.2)';
+
+    void p.offsetWidth; // force reflow
+
+    setTimeout(() => {
+        p.style.transition = 'top 0.46s cubic-bezier(0.2, 0.8, 0.2, 1), left 0.46s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.46s ease';
+        p.style.left = `${to.left + to.width/2 - 16}px`;
+        p.style.top = `${to.top + to.height/2 - 12}px`;
+        p.style.transform = 'scale(1)';
+    }, 35);
+
+    setTimeout(() => {
+        p.style.transition = 'opacity 0.15s';
+        p.style.opacity = '0';
+        if (cb) cb();
+    }, 520);
+}
+
+// Генератор кадрів для десяткового додавання
+function buildFrames(a, b) {
+    const frames = [];
+    const strA = a.toString().padStart(4, '0');
+    const strB = b.toString().padStart(4, '0');
+
+    const resDigits = [null, null, null, null];
+    const carries = [0, 0, 0, 0, 0];
+
+    // 0: Початковий стан
+    frames.push({
+        col: null,
+        digitsA: strA.split('').map(d => parseInt(d, 10)),
+        digitsB: strB.split('').map(d => parseInt(d, 10)),
+        resDigits: [...resDigits],
+        carries: [...carries],
+        calc: null,
+        fly: null,
+        cue: `Початок: Додаємо A = ${a} та B = ${b}. Стартуємо з наймолодшого розряду одиниць 10⁰ (справа).`
+    });
+
+    let currentCarry = 0;
+
+    for (let p = 0; p <= 3; p++) {
+        const digA = parseInt(strA[3 - p], 10);
+        const digB = parseInt(strB[3 - p], 10);
+        const cin = currentCarry;
+        const total = digA + digB + cin;
+        const sumDigit = total % 10;
+        const cout = Math.floor(total / 10);
+
+        // Крок 1: Фокус на стовпчику 10^p
+        frames.push({
+            col: p,
+            digitsA: strA.split('').map(d => parseInt(d, 10)),
+            digitsB: strB.split('').map(d => parseInt(d, 10)),
+            resDigits: [...resDigits],
+            carries: [...carries],
+            calc: { inA: '--', inB: '--', cin: '--', eq: `Розряд 10^${p}: Очікуємо цифри`, outS: '--', outC: '--' },
+            fly: null,
+            cue: `Розряд 10^${p}: Зчитуємо цифру A (${digA}), цифру B (${digB}) та перенос Cin (${cin}).`
+        });
+
+        // Крок 2: Цифри летять у калькулятор
+        frames.push({
+            col: p,
+            digitsA: strA.split('').map(d => parseInt(d, 10)),
+            digitsB: strB.split('').map(d => parseInt(d, 10)),
+            resDigits: [...resDigits],
+            carries: [...carries],
+            calc: { inA: digA, inB: digB, cin: cin, eq: `Завантажено: ${digA}, ${digB}, ${cin}`, outS: '--', outC: '--' },
+            fly: { from: `card-a-${p}`, to: 'slot-in-a', text: `${digA},${digB},${cin}`, color: '#0284c7' },
+            cue: `Цифри летять у калькулятор! Завантажено: A=${digA}, B=${digB}, Cin=${cin}.`
+        });
+
+        // Крок 3: Калькулятор обчислює результат
+        frames.push({
+            col: p,
+            digitsA: strA.split('').map(d => parseInt(d, 10)),
+            digitsB: strB.split('').map(d => parseInt(d, 10)),
+            resDigits: [...resDigits],
+            carries: [...carries],
+            calc: { inA: digA, inB: digB, cin: cin, eq: `${digA} + ${digB} + ${cin} = ${total}`, outS: sumDigit, outC: cout },
+            fly: null,
+            cue: `Калькулятор додає: ${digA} + ${digB} + ${cin} = ${total}. Одиниці: ${sumDigit}, перенос у наступний розряд: ${cout}.`
+        });
+
+        // Крок 4: Цифра суми (S) летить у рядок результату
+        resDigits[p] = sumDigit;
+        frames.push({
+            col: p,
+            digitsA: strA.split('').map(d => parseInt(d, 10)),
+            digitsB: strB.split('').map(d => parseInt(d, 10)),
+            resDigits: [...resDigits],
+            carries: [...carries],
+            calc: { inA: digA, inB: digB, cin: cin, eq: `${digA} + ${digB} + ${cin} = ${total}`, outS: sumDigit, outC: cout },
+            fly: { from: 'slot-out-s', to: `card-res-${p}`, text: `${sumDigit}`, color: '#0284c7' },
+            cue: `Цифра суми S = ${sumDigit} летить із калькулятора у результат розряду 10^${p}.`
+        });
+
+        // Крок 5 (якщо Cout > 0): Перенос летить у наступний стовпчик!
+        if (cout > 0) {
+            const nextCol = p + 1;
+            frames.push({
+                col: p,
+                digitsA: strA.split('').map(d => parseInt(d, 10)),
+                digitsB: strB.split('').map(d => parseInt(d, 10)),
+                resDigits: [...resDigits],
+                carries: [...carries],
+                calc: { inA: digA, inB: digB, cin: cin, eq: `ПЕРЕНОС Cout = +${cout}!`, outS: sumDigit, outC: cout },
+                fly: { from: 'slot-out-c', to: `carry-cell-${nextCol}`, text: `+${cout}`, color: 'var(--carry-color)' },
+                cue: `Сума ≥ 10! Перенос (+${cout}) летить у наступний розряд 10^${nextCol}!`
+            });
+            carries[nextCol] = cout;
+            currentCarry = cout;
+        } else {
+            currentCarry = 0;
+        }
+    }
+
+    // Завершення
+    const totalSum = a + b;
+    frames.push({
+        col: null,
+        digitsA: strA.split('').map(d => parseInt(d, 10)),
+        digitsB: strB.split('').map(d => parseInt(d, 10)),
+        resDigits: [...resDigits],
+        carries: [...carries],
+        calc: { inA: '--', inB: '--', cin: '--', eq: `Результат: ${a} + ${b} = ${totalSum}`, outS: '--', outC: '--' },
+        fly: null,
+        cue: `Додавання завершено! Отримано суму: ${totalSum}${totalSum > 9999 ? ' [Переповнення 4-го розряду C4!]' : ''}.`
+    });
+
+    return frames;
+}
+
+let frames = buildFrames(valA, valB);
+let curIdx = 0;
+
+function renderFrame(idx) {
+    const f = frames[idx];
+
+    // 1. Підсвітка активного стовпчика
+    for (let p = 0; p <= 3; p++) {
+        const cells = document.querySelectorAll(`.col-cell-${p}`);
+        cells.forEach(c => {
+            if (f.col === p) c.classList.add('col-focus');
+            else c.classList.remove('col-focus');
+        });
+    }
+
+    // 2. Оновлення калькулятора ліворуч
+    if (f.calc) {
+        document.getElementById('val-in-a').textContent = f.calc.inA;
+        document.getElementById('val-in-b').textContent = f.calc.inB;
+        document.getElementById('val-in-cin').textContent = f.calc.cin;
+        document.getElementById('calc-equation').textContent = f.calc.eq;
+        document.getElementById('val-out-s').textContent = f.calc.outS;
+        document.getElementById('val-out-c').textContent = f.calc.outC;
+    } else {
+        document.getElementById('val-in-a').textContent = '--';
+        document.getElementById('val-in-b').textContent = '--';
+        document.getElementById('val-in-cin').textContent = '--';
+        document.getElementById('calc-equation').textContent = 'Очікування цифр розряду...';
+        document.getElementById('val-out-s').textContent = '--';
+        document.getElementById('val-out-c').textContent = '--';
+    }
+
+    // 3. Картки доданка A
+    for (let p = 0; p <= 3; p++) {
+        const card = document.getElementById(`card-a-${p}`);
+        const dig = f.digitsA[3 - p];
+        card.textContent = dig;
+        card.classList.toggle('zero-dim', dig === 0 && p > 0 && f.digitsA.slice(0, 3 - p).every(d => d === 0));
+    }
+
+    // 4. Картки доданка B
+    for (let p = 0; p <= 3; p++) {
+        const card = document.getElementById(`card-b-${p}`);
+        const dig = f.digitsB[3 - p];
+        card.textContent = dig;
+        card.classList.toggle('zero-dim', dig === 0 && p > 0 && f.digitsB.slice(0, 3 - p).every(d => d === 0));
+    }
+
+    // 5. Картки результату (Сума)
+    for (let p = 0; p <= 3; p++) {
+        const card = document.getElementById(`card-res-${p}`);
+        const resVal = f.resDigits[p];
+        if (resVal !== null) {
+            card.textContent = resVal;
+            card.classList.remove('zero-dim');
+        } else {
+            card.textContent = '0';
+            card.classList.add('zero-dim');
+        }
+    }
+
+    // 6. Комірки переносів
+    for (let c = 0; c <= 4; c++) {
+        const cell = document.getElementById(`carry-cell-${c}`);
+        if (cell) {
+            if (f.carries[c] > 0) {
+                cell.textContent = f.carries[c];
+                cell.classList.add('has-carry');
+            } else {
+                cell.textContent = '0';
+                cell.classList.remove('has-carry');
+            }
+        }
+    }
+
+    // 7. Підказка та лічильник
+    document.getElementById('cue').textContent = f.cue;
+    document.getElementById('step-counter').textContent = `Крок ${idx} / ${frames.length - 1}`;
+    document.getElementById('next-btn').disabled = (idx >= frames.length - 1);
+
+    // 8. Анімація польоту
+    if (f.fly) {
+        fly(f.fly.from, f.fly.to, f.fly.text, f.fly.color);
+    }
+}
+
+function stepForward() {
+    if (curIdx < frames.length - 1) {
+        curIdx++;
+        renderFrame(curIdx);
+    }
+}
+
+function stepBackward() {
+    if (curIdx > 0) {
+        curIdx--;
+        renderFrame(curIdx);
+    }
+}
+
+function resetFrames() {
+    curIdx = 0;
+    renderFrame(0);
+}
+
+function applyCustomNumbers() {
+    const rawA = parseInt(document.getElementById('input-a').value, 10);
+    const rawB = parseInt(document.getElementById('input-b').value, 10);
+    if (isNaN(rawA) || isNaN(rawB)) return;
+
+    valA = Math.max(0, Math.min(9999, rawA));
+    valB = Math.max(0, Math.min(9999, rawB));
+
+    frames = buildFrames(valA, valB);
+    curIdx = 0;
+    renderFrame(0);
+}
+
+function setPreset(a, b) {
+    document.getElementById('input-a').value = a;
+    document.getElementById('input-b').value = b;
+    applyCustomNumbers();
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault();
+        stepForward();
+    } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        stepBackward();
+    }
+});
+
+renderFrame(0);
+</script>
+
+</body>
+</html>

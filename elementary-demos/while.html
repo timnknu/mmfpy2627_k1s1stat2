@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Як працює цикл while у пам'яті та процесорі</title>
+<style>
+    :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --muted: #64748b;
+        --pc-glow: #fde047;
+        --pc-border: #ca8a04;
+        --conductor: #7c3aed;
+        --lamp-gold: #f59e0b;
+        --slice-active: rgba(99, 102, 241, 0.12);
+        --slice-border: #6366f1;
+        --loop-jump: #0284c7;
+    }
+
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 20px; background: var(--bg); color: var(--text); user-select: none; }
+
+    /* Верхня панель */
+    .top-bar {
+        max-width: 1260px; margin: 0 auto 16px auto; display: flex;
+        justify-content: space-between; align-items: center; background: var(--card-bg);
+        padding: 10px 20px; border-radius: 10px; border: 1px solid var(--border);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .btn-group { display: flex; gap: 8px; align-items: center; }
+    button {
+        background: #0284c7; color: #fff; border: none; padding: 8px 16px;
+        border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;
+        transition: background 0.15s, transform 0.05s;
+    }
+    button:hover { background: #0369a1; }
+    button:active { transform: scale(0.98); }
+    button:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
+    button.secondary { background: #f1f5f9; color: var(--text); border: 1px solid var(--border); }
+    button.secondary:hover { background: #e2e8f0; }
+
+    .step-badge { font-size: 12px; font-weight: bold; color: var(--muted); padding: 0 8px; }
+    .presenter-cue { font-size: 14px; font-weight: 600; color: var(--conductor); }
+
+    /* Основна сітка */
+    .stage {
+        max-width: 1260px; margin: 0 auto; display: grid;
+        grid-template-columns: 260px 320px 1fr; gap: 16px;
+    }
+    .card {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+        position: relative;
+    }
+    .card-title {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.8px; color: var(--muted); margin-bottom: 10px;
+    }
+
+    /* Код */
+    .code-editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; line-height: 2.2; }
+    .code-line { white-space: pre; transition: opacity 0.3s; position: relative; }
+    .code-line.skipped { opacity: 0.25; }
+    .tok {
+        padding: 2px 5px; border-radius: 4px; transition: all 0.2s;
+        display: inline-block; border: 1px solid transparent;
+    }
+    .tok.pc-focus {
+        background: var(--pc-glow); border-color: var(--pc-border);
+        font-weight: bold; box-shadow: 0 0 8px rgba(250, 204, 21, 0.6);
+        transform: scale(1.06);
+    }
+
+    /* Інтерпретатор */
+    .conductor-box {
+        border: 2px solid #cbd5e1; border-radius: 8px;
+        padding: 12px; transition: all 0.25s; background: #faf5ff; text-align: center;
+    }
+    .conductor-box.active {
+        border-color: var(--conductor);
+        box-shadow: 0 0 16px rgba(124, 58, 237, 0.25);
+        background: #f3e8ff;
+    }
+    .conductor-title { font-size: 12px; font-weight: 800; color: var(--conductor); letter-spacing: 0.5px; }
+    .conductor-hand {
+        margin-top: 8px; padding: 6px; border-radius: 6px; background: #fff;
+        border: 1px dashed #d8b4fe; font-size: 12px; font-family: monospace; min-height: 28px;
+        display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--conductor);
+    }
+    .loop-info-row {
+        margin-top: 8px; display: flex; justify-content: space-between; font-size: 11px; font-weight: bold;
+    }
+    .loop-badge { background: #ede9fe; color: var(--conductor); padding: 2px 6px; border-radius: 4px; }
+
+    /* Карта пам'яті */
+    .ledger-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+    .ledger-table th, .ledger-table td { border: 1px solid var(--border); padding: 5px 6px; text-align: left; }
+    .ledger-table th { background: #f8fafc; color: var(--muted); }
+    .ledger-row.active { background: #e0e7ff; font-weight: bold; }
+
+    /* CPU / АЛП */
+    .cpu-chassis {
+        margin-top: 14px; border: 2px solid #0284c7; border-radius: 8px;
+        background: #f0f9ff; padding: 10px;
+    }
+    .cpu-chassis-title {
+        font-size: 11px; font-weight: 800; color: #0369a1; text-transform: uppercase;
+        letter-spacing: 0.5px; margin-bottom: 6px; display: flex; justify-content: space-between;
+    }
+    .alu-unit {
+        border: 1px solid #bae6fd; border-radius: 6px;
+        padding: 8px; background: #ffffff; font-size: 12px; transition: all 0.2s;
+    }
+    .alu-unit.active {
+        border-color: #0284c7; box-shadow: 0 0 10px rgba(2, 132, 199, 0.3); background: #e0f2fe;
+    }
+    .alu-row { display: flex; justify-content: space-between; font-family: monospace; }
+    .alu-val { font-weight: bold; color: #0284c7; }
+
+    /* Пам'ять (поле ламп) */
+    .memory-stage { display: flex; flex-direction: column; gap: 10px; }
+    .byte-row {
+        position: relative; display: flex; gap: 4px; padding: 8px 10px;
+        border-radius: 8px; border: 1px solid transparent; transition: all 0.3s;
+    }
+    .byte-row.slice-focus {
+        background: var(--slice-active); border-color: var(--slice-border);
+        box-shadow: 0 0 12px rgba(99, 102, 241, 0.15);
+    }
+    .byte-label {
+        position: absolute; left: -60px; top: 18px; font-size: 10px;
+        font-family: monospace; color: var(--muted); font-weight: 600;
+    }
+
+    /* Настільна лампа */
+    .lamp-unit { display: flex; flex-direction: column; align-items: center; width: 34px; }
+    .lamp-svg { width: 34px; height: 42px; overflow: visible; }
+    .lamp-idx { font-size: 9px; font-family: monospace; color: #94a3b8; margin-top: 2px; }
+
+    .lamp-glow { opacity: 0; transition: opacity 0.25s; filter: blur(3px); fill: var(--lamp-gold); }
+    .lamp-shade { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 1.5; transition: all 0.25s; }
+    .lamp-bulb { fill: #e2e8f0; transition: all 0.25s; }
+    .lamp-stem, .lamp-base { stroke: #64748b; stroke-width: 2; fill: #f8fafc; }
+    .lamp-cord { stroke: #94a3b8; stroke-width: 1.2; }
+
+    /* Увімкнено */
+    .lit .lamp-glow { opacity: 0.85; }
+    .lit .lamp-shade { fill: #f59e0b; stroke: #d97706; }
+    .lit .lamp-bulb { fill: #fff; filter: drop-shadow(0 0 4px #fbbf24); }
+    .lit .lamp-unit { transform: translateY(-1px); }
+
+    /* Фонові ряди ламп */
+    .faded-memory {
+        opacity: 0.45; pointer-events: none;
+        mask-image: linear-gradient(to bottom, black 50%, rgba(0,0,0,0.5) 80%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, black 50%, rgba(0,0,0,0.5) 80%, transparent 100%);
+    }
+
+    /* Анімована точка польоту */
+    #flying-dot {
+        position: fixed; width: 28px; height: 28px; border-radius: 50%;
+        background: #fff; border: 2px solid var(--conductor); color: var(--conductor);
+        box-shadow: 0 0 14px var(--conductor); display: flex; align-items: center;
+        justify-content: center; font-size: 11px; font-weight: 800;
+        pointer-events: none; opacity: 0; z-index: 1000;
+    }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+    <div class="btn-group">
+        <button class="secondary" onclick="stepBackward()">&lt; Назад</button>
+        <button id="next-btn" onclick="stepForward()">Наступний крок &gt;</button>
+        <button class="secondary" onclick="resetFrames()">Скинути</button>
+        <span class="step-badge" id="step-counter">Крок 0 / 41</span>
+    </div>
+
+    <div id="cue" class="presenter-cue">Готово. Натисніть «Наступний крок».</div>
+</div>
+
+<div class="stage">
+    <!-- КОЛОНКА 1: КОД -->
+    <div class="card">
+        <div class="card-title">Файл myprog.py</div>
+        <div class="code-editor">
+            <div id="line-1" class="code-line">1: <span id="tok-x1" class="tok">x</span> = <span id="tok-2-init" class="tok">2</span></div>
+            <div id="line-2" class="code-line">2: <span id="tok-while" class="tok">while</span> <span id="tok-x-cond" class="tok">x</span> <span id="tok-gt">&gt;</span> <span id="tok-0-cond" class="tok">0</span>:</div>
+            <div id="line-3" class="code-line">3:     <span id="tok-x-tgt" class="tok">x</span> = <span id="tok-x-src" class="tok">x</span> <span id="tok-minus">-</span> <span id="tok-1-dec" class="tok">1</span></div>
+            <div id="line-4" class="code-line">4: <span id="tok-done" class="tok">done</span> = <span id="tok-1-done" class="tok">1</span></div>
+        </div>
+    </div>
+
+    <!-- КОЛОНКА 2: ВИКОНАВЧИЙ ЦЕНТР -->
+    <div class="card">
+        <div class="card-title">Виконавчий центр</div>
+
+        <div id="conductor-box" class="conductor-box">
+            <div class="conductor-title">ІНТЕРПРЕТАТОР PYTHON</div>
+            <div id="conductor-hand" class="conductor-hand">Утримує: (порожньо)</div>
+            <div class="loop-info-row">
+                <span id="status-text" style="color: var(--muted);">Вказівник: рядок 1</span>
+                <span id="iter-badge" class="loop-badge">Цикл не почато</span>
+            </div>
+        </div>
+
+        <div class="card-title" style="margin-top: 14px; margin-bottom: 4px;">Карта пам'яті (бухгалтерія)</div>
+        <table class="ledger-table">
+            <thead>
+                <tr>
+                    <th>Змінна</th>
+                    <th>Адреси</th>
+                    <th>Значення</th>
+                </tr>
+            </thead>
+            <tbody id="ledger-body">
+                <tr id="ledger-none"><td colspan="3" style="text-align: center; color: var(--muted);">- Порожньо -</td></tr>
+            </tbody>
+        </table>
+
+        <div class="cpu-chassis">
+            <div class="cpu-chassis-title">
+                <span>CPU / АЛП</span>
+                <span style="font-size: 9px; color: #0284c7;">ОБЧИСЛЮВАЧ / КОМПАРАТОР</span>
+            </div>
+            <div id="alu-unit" class="alu-unit">
+                <div class="alu-row"><span>Входи:</span> <span id="alu-in" class="alu-val">-- , --</span></div>
+                <div class="alu-row" style="margin-top: 4px;"><span>Результат:</span> <span id="alu-res" class="alu-val">--</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- КОЛОНКА 3: ЛАМПИ -->
+    <div class="card" style="padding-left: 70px;">
+        <div class="card-title" style="display: flex; justify-content: space-between;">
+            <span>Фізична пам'ять (поле настільних ламп)</span>
+            <span style="color: var(--muted); font-size: 10px;">( ) ВИМК &nbsp;&nbsp; (*) УВІМК</span>
+        </div>
+
+        <div class="memory-stage">
+            <!-- Байт 0: x -->
+            <div id="byte-0" class="byte-row">
+                <div class="byte-label">#00..07 [x]</div>
+                <div id="lamps-b0" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Байт 1: done -->
+            <div id="byte-1" class="byte-row">
+                <div class="byte-label">#08..15 [done]</div>
+                <div id="lamps-b1" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Байт 2: вільний -->
+            <div id="byte-2" class="byte-row">
+                <div class="byte-label">#16..23</div>
+                <div id="lamps-b2" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Байт 3: вільний -->
+            <div id="byte-3" class="byte-row">
+                <div class="byte-label">#24..31</div>
+                <div id="lamps-b3" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Фонові лампи -->
+            <div class="faded-memory">
+                <div class="byte-row"><div class="byte-label">#32..39</div><div id="lamps-b4" style="display: flex; gap: 4px;"></div></div>
+                <div class="byte-row"><div class="byte-label">#40..47</div><div id="lamps-b5" style="display: flex; gap: 4px;"></div></div>
+            </div>
+        </div>
+        <div style="font-size: 10px; color: var(--muted); text-align: center; margin-top: 8px;">
+            ↓ Мільйони вільних настільних ламп простягаються далі по кристалу ↓
+        </div>
+    </div>
+</div>
+
+<div id="flying-dot"></div>
+
+<script>
+function createLampSVG(id, power) {
+    return `
+    <div class="lamp-unit" id="lunit-${id}">
+        <svg class="lamp-svg" viewBox="0 0 34 42">
+            <circle class="lamp-glow" cx="17" cy="16" r="14" />
+            <ellipse class="lamp-base" cx="17" cy="38" rx="13" ry="2.5" />
+            <line class="lamp-stem" x1="17" y1="38" x2="17" y2="16" />
+            <line class="lamp-cord" x1="21" y1="18" x2="21" y2="25" />
+            <circle cx="21" cy="25" r="1.3" fill="#64748b" />
+            <circle class="lamp-bulb" cx="17" cy="16" r="3.2" />
+            <polygon class="lamp-shade" points="10,5 24,5 30,18 4,18" />
+        </svg>
+        <span class="lamp-idx">2<sup>${power}</sup></span>
+    </div>`;
+}
+
+function fillRow(containerId, startIdx) {
+    let html = '';
+    for (let i = 7; i >= 0; i--) html += createLampSVG(startIdx + i, i);
+    document.getElementById(containerId).innerHTML = html;
+}
+
+fillRow('lamps-b0', 0);
+fillRow('lamps-b1', 8);
+fillRow('lamps-b2', 16);
+fillRow('lamps-b3', 24);
+fillRow('lamps-b4', 32);
+fillRow('lamps-b5', 40);
+
+function fly(fromId, toId, text, cb) {
+    const fromEl = document.getElementById(fromId);
+    const toEl = document.getElementById(toId);
+    if (!fromEl || !toEl) { if (cb) cb(); return; }
+
+    const from = fromEl.getBoundingClientRect();
+    const to = toEl.getBoundingClientRect();
+    const dot = document.getElementById('flying-dot');
+
+    dot.style.transition = 'none';
+    dot.textContent = text;
+    dot.style.left = `${from.left + from.width/2 - 14}px`;
+    dot.style.top = `${from.top + from.height/2 - 14}px`;
+    dot.style.opacity = '1';
+    dot.style.transform = 'scale(1.25)';
+
+    void dot.offsetWidth; // force reflow
+
+    setTimeout(() => {
+        dot.style.transition = 'top 0.48s cubic-bezier(0.2, 0.8, 0.2, 1), left 0.48s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.48s ease';
+        dot.style.left = `${to.left + to.width/2 - 14}px`;
+        dot.style.top = `${to.top + to.height/2 - 14}px`;
+        dot.style.transform = 'scale(1)';
+    }, 40);
+
+    setTimeout(() => {
+        dot.style.transition = 'opacity 0.15s';
+        dot.style.opacity = '0';
+        if (cb) cb();
+    }, 540);
+}
+
+// -------------------------------------------------------------
+// 41 МІКРО-КРОК ДЛЯ WHILE (Countdown: 2 -> 1 -> 0 -> Exit)
+// -------------------------------------------------------------
+const frames = [
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Вказівник: рядок 1", iter: "Цикл не почато", ledger: [], slice: null, lamps: [], alu: null, skipped: [], cue: "Готово. Демонстрація циклу while: x = 2, лічильник кроків вниз." },
+
+    // РЯДОК 1: x = 2
+    { tok: 'tok-x1', conductor: true, hand: '(порожньо)', status: "Оголошення x", iter: "Цикл не почато", ledger: [], slice: null, lamps: [], alu: null, skipped: [], cue: "Рядок 1: Інтерпретатор зустрічає змінну 'x'." },
+    { tok: 'tok-x1', conductor: true, hand: '(порожньо)', status: "Виділення пам'яті для x", iter: "Цикл не почато", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: 'byte-0', lamps: [], alu: null, skipped: [], cue: "Виділяємо байт 0 (#00..07). Ця комірка буде ПЕРЕЗАПИСУВАТИСЯ на кожній ітерації!" },
+    { tok: 'tok-2-init', conductor: true, hand: '(порожньо)', status: "Зчитування константи 2", iter: "Цикл не почато", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: null, lamps: [], alu: null, skipped: [], cue: "Вказівник переходить до константи '2' у коді." },
+    { tok: 'tok-2-init', conductor: true, hand: '2', fly: {from: 'tok-2-init', to: 'conductor-hand', val: '2'}, status: "Вилучення 2", iter: "Цикл не почато", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: null, lamps: [], alu: null, skipped: [], cue: "Константа '2' вилучається з тексту програми." },
+    { tok: 'tok-2-init', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'byte-0', val: '2'}, status: "Запис 2 у байт 0", iter: "Цикл не почато", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: 'byte-0', lamps: [], alu: null, skipped: [], cue: "Число '2' летить шиною в пам'ять." },
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Початковий стан: x = 2", iter: "Цикл не почато", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: null, skipped: [], cue: "Лампа 2^1 клацає УВІМК (2^1 = 2). Початковий стан зафіксовано." },
+
+    // ==========================================
+    // ІТЕРАЦІЯ 1: Перевірка умови (x = 2 > 0)
+    // ==========================================
+    { tok: 'tok-while', conductor: true, hand: '(порожньо)', status: "Заголовок while", iter: "Ітерація 1 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: null, skipped: [], cue: "Рядок 2: Інтерпретатор зустрічає 'while'. Починається цикл!" },
+    { tok: 'tok-x-cond', conductor: true, hand: '(порожньо)', status: "Зчитування x з пам'яті", iter: "Ітерація 1 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'2', act:true}], slice: 'byte-0', lamps: [1], alu: null, skipped: [], cue: "Інтерпретатор звертається до пам'яті за поточним значенням 'x'." },
+    { tok: 'tok-x-cond', conductor: true, hand: '(порожньо)', fly: {from: 'byte-0', to: 'alu-in', val: '2'}, status: "x (2) -> Вхід A CPU", iter: "Ітерація 1 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: {in: '2 , --', res: '--'}, skipped: [], cue: "Поточний стан 'x' (2) летить у вхід A CPU." },
+    { tok: 'tok-gt', conductor: true, hand: '(порожньо)', status: "Налаштування '>'", iter: "Ітерація 1 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: {in: '2 > ?', res: '--'}, skipped: [], cue: "Компаратор налаштовується на операцію '>'." },
+    { tok: 'tok-0-cond', conductor: true, hand: '(порожньо)', status: "Зчитування константи 0", iter: "Ітерація 1 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: {in: '2 > ?', res: '--'}, skipped: [], cue: "Вказівник переходить до константи '0' в умові." },
+    { tok: 'tok-0-cond', conductor: true, hand: '0', fly: {from: 'tok-0-cond', to: 'conductor-hand', val: '0'}, status: "Вилучення 0", iter: "Ітерація 1 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: {in: '2 > ?', res: '--'}, skipped: [], cue: "Константа '0' вилучається з коду." },
+    { tok: 'tok-0-cond', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'alu-in', val: '0'}, status: "0 -> Вхід B CPU", iter: "Ітерація 1 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: {in: '2 , 0', res: '--'}, skipped: [], cue: "Число '0' завантажується у вхід B CPU." },
+    { tok: 'tok-gt', conductor: true, hand: '(порожньо)', status: "Порівняння 2 > 0", iter: "Ітерація 1 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: {in: '2 > 0', res: 'TRUE', act: true}, skipped: [], cue: "CPU порівнює: 2 > 0. Результат: TRUE (1 / Істина)!" },
+    { tok: 'tok-gt', conductor: true, hand: 'TRUE', fly: {from: 'alu-res', to: 'conductor-box', val: 'TRUE'}, status: "Прапорець TRUE", iter: "Ітерація 1 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: {in: '2 > 0', res: 'TRUE'}, skipped: [], cue: "Сигнал TRUE летить до Інтерпретатора." },
+    { tok: null, conductor: true, hand: 'TRUE', status: "Рішення: ВХІД у цикл", iter: "Ітерація 1 (тіло)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: null, skipped: [], cue: "Умова істинна! Входимо в тіло циклу (рядок 3)." },
+
+    // ІТЕРАЦІЯ 1: Тіло циклу (x = x - 1 => 2 - 1 = 1)
+    { tok: 'tok-x-src', conductor: true, hand: '(порожньо)', status: "Рядок 3: Читання x", iter: "Ітерація 1 (обчислення)", ledger: [{v:'x', r:'#00..07', val:'2', act:true}], slice: 'byte-0', lamps: [1], alu: null, skipped: [], cue: "Зчитуємо поточне значення 'x' для віднімання." },
+    { tok: 'tok-x-src', conductor: true, hand: '(порожньо)', fly: {from: 'byte-0', to: 'alu-in', val: '2'}, status: "x (2) -> Вхід A", iter: "Ітерація 1 (обчислення)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: {in: '2 , --', res: '--'}, skipped: [], cue: "Значення '2' летить у вхід A CPU." },
+    { tok: 'tok-1-dec', conductor: true, hand: '1', fly: {from: 'tok-1-dec', to: 'conductor-hand', val: '1'}, status: "Вилучення 1", iter: "Ітерація 1 (обчислення)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: {in: '2 , --', res: '--'}, skipped: [], cue: "Константа '1' вилучається з рядка 3." },
+    { tok: 'tok-1-dec', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'alu-in', val: '1'}, status: "1 -> Вхід B", iter: "Ітерація 1 (обчислення)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: {in: '2 , 1', res: '--'}, skipped: [], cue: "Число '1' завантажується у вхід B CPU." },
+    { tok: 'tok-minus', conductor: true, hand: '(порожньо)', status: "Віднімання 2 - 1", iter: "Ітерація 1 (обчислення)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: null, lamps: [1], alu: {in: '2 - 1', res: '1', act: true}, skipped: [], cue: "CPU обчислює: 2 - 1 = 1." },
+    { tok: 'tok-x-tgt', conductor: true, hand: '(порожньо)', fly: {from: 'alu-res', to: 'byte-0', val: '1'}, status: "Запис 1 у той самий байт 0!", iter: "Ітерація 1 (запис)", ledger: [{v:'x', r:'#00..07', val:'2'}], slice: 'byte-0', lamps: [1], alu: {in: '-- , --', res: '--'}, skipped: [], cue: "Нове значення '1' перезаписує ТІ САМІ лампи байта 0!" },
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Лампи змінили стан: x = 1", iter: "Ітерація 1 (завершено)", ledger: [{v:'x', r:'#00..07', val:'1'}], slice: null, lamps: [0], alu: null, skipped: [], cue: "Лампа 2^1 гасне, лампа 2^0 клацає: УВІМК. Тепер x = 1!" },
+
+    // СТРИБОК НАЗАД ВГОРУ!
+    { tok: 'tok-while', conductor: true, hand: '(порожньо)', status: "⟲ СТРИБОК ВГОРУ (Назад на while)", iter: "Стрибок назад!", ledger: [{v:'x', r:'#00..07', val:'1'}], slice: null, lamps: [0], alu: null, skipped: [], cue: "КІНЕЦЬ ТІЛА ЦИКЛУ: Вказівник команд здійснює стрибок ВГОРУ назад на рядок 2!" },
+
+    // ==========================================
+    // ІТЕРАЦІЯ 2: Перевірка умови (x = 1 > 0)
+    // ==========================================
+    { tok: 'tok-x-cond', conductor: true, hand: '(порожньо)', status: "Знову перевірка: читання x", iter: "Ітерація 2 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'1', act:true}], slice: 'byte-0', lamps: [0], alu: null, skipped: [], cue: "Ітерація 2: Зчитуємо новий стан 'x' (1) з ламп." },
+    { tok: 'tok-x-cond', conductor: true, hand: '(порожньо)', fly: {from: 'byte-0', to: 'alu-in', val: '1'}, status: "x (1) -> Вхід A", iter: "Ітерація 2 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'1'}], slice: null, lamps: [0], alu: {in: '1 , --', res: '--'}, skipped: [], cue: "Значення '1' летить у вхід A CPU." },
+    { tok: 'tok-0-cond', conductor: true, hand: '0', fly: {from: 'tok-0-cond', to: 'alu-in', val: '0'}, status: "0 -> Вхід B", iter: "Ітерація 2 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'1'}], slice: null, lamps: [0], alu: {in: '1 , 0', res: '--'}, skipped: [], cue: "Константа '0' знову подається у вхід B CPU." },
+    { tok: 'tok-gt', conductor: true, hand: '(порожньо)', status: "Порівняння 1 > 0", iter: "Ітерація 2 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'1'}], slice: null, lamps: [0], alu: {in: '1 > 0', res: 'TRUE', act: true}, skipped: [], cue: "CPU порівнює: 1 > 0. Результат знову: TRUE!" },
+    { tok: 'tok-gt', conductor: true, hand: 'TRUE', fly: {from: 'alu-res', to: 'conductor-box', val: 'TRUE'}, status: "Прапорець TRUE", iter: "Ітерація 2 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'1'}], slice: null, lamps: [0], alu: {in: '1 > 0', res: 'TRUE'}, skipped: [], cue: "Сигнал TRUE підтверджує: продовжуємо цикл." },
+    { tok: null, conductor: true, hand: 'TRUE', status: "Рішення: Другий вхід у тіло", iter: "Ітерація 2 (тіло)", ledger: [{v:'x', r:'#00..07', val:'1'}], slice: null, lamps: [0], alu: null, skipped: [], cue: "Вдруге заходимо в рядок 3!" },
+
+    // ІТЕРАЦІЯ 2: Тіло циклу (x = x - 1 => 1 - 1 = 0)
+    { tok: 'tok-x-src', conductor: true, hand: '(порожньо)', status: "Рядок 3: Читання x (1)", iter: "Ітерація 2 (обчислення)", ledger: [{v:'x', r:'#00..07', val:'1', act:true}], slice: 'byte-0', lamps: [0], alu: null, skipped: [], cue: "Зчитуємо поточне значення 'x' (1)." },
+    { tok: 'tok-x-src', conductor: true, hand: '(порожньо)', fly: {from: 'byte-0', to: 'alu-in', val: '1'}, status: "x (1) -> Вхід A", iter: "Ітерація 2 (обчислення)", ledger: [{v:'x', r:'#00..07', val:'1'}], slice: null, lamps: [0], alu: {in: '1 , --', res: '--'}, skipped: [], cue: "Значення '1' летить у вхід A CPU." },
+    { tok: 'tok-1-dec', conductor: true, hand: '1', fly: {from: 'tok-1-dec', to: 'alu-in', val: '1'}, status: "1 -> Вхід B", iter: "Ітерація 2 (обчислення)", ledger: [{v:'x', r:'#00..07', val:'1'}], slice: null, lamps: [0], alu: {in: '1 , 1', res: '--'}, skipped: [], cue: "Константа '1' завантажується у вхід B CPU." },
+    { tok: 'tok-minus', conductor: true, hand: '(порожньо)', status: "Віднімання 1 - 1", iter: "Ітерація 2 (обчислення)", ledger: [{v:'x', r:'#00..07', val:'1'}], slice: null, lamps: [0], alu: {in: '1 - 1', res: '0', act: true}, skipped: [], cue: "CPU обчислює: 1 - 1 = 0." },
+    { tok: 'tok-x-tgt', conductor: true, hand: '(порожньо)', fly: {from: 'alu-res', to: 'byte-0', val: '0'}, status: "Запис 0 у байт 0", iter: "Ітерація 2 (запис)", ledger: [{v:'x', r:'#00..07', val:'1'}], slice: 'byte-0', lamps: [0], alu: {in: '-- , --', res: '--'}, skipped: [], cue: "Результат '0' летить у той самий байт 0." },
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Всі лампи x згасли: x = 0", iter: "Ітерація 2 (завершено)", ledger: [{v:'x', r:'#00..07', val:'0'}], slice: null, lamps: [], alu: null, skipped: [], cue: "Лампа 2^0 гасне: клац! Усі лампи для x тепер ТЕМНІ (x = 0)." },
+
+    // ЗНОВУ СТРИБОК ВГОРУ!
+    { tok: 'tok-while', conductor: true, hand: '(порожньо)', status: "⟲ СТРИБОК ВГОРУ (Назад на while)", iter: "Стрибок назад!", ledger: [{v:'x', r:'#00..07', val:'0'}], slice: null, lamps: [], alu: null, skipped: [], cue: "Вдруге повертаємося вгору на заголовок while!" },
+
+    // ==========================================
+    // ІТЕРАЦІЯ 3: Перевірка умови (x = 0 > 0) => FALSE!
+    // ==========================================
+    { tok: 'tok-x-cond', conductor: true, hand: '(порожньо)', status: "Зчитування x (0)", iter: "Ітерація 3 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'0', act:true}], slice: 'byte-0', lamps: [], alu: null, skipped: [], cue: "Ітерація 3: Зчитуємо стан ламп x. Вони всі темні (0)." },
+    { tok: 'tok-x-cond', conductor: true, hand: '(порожньо)', fly: {from: 'byte-0', to: 'alu-in', val: '0'}, status: "x (0) -> Вхід A", iter: "Ітерація 3 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'0'}], slice: null, lamps: [], alu: {in: '0 , --', res: '--'}, skipped: [], cue: "Значення '0' летить у вхід A CPU." },
+    { tok: 'tok-0-cond', conductor: true, hand: '0', fly: {from: 'tok-0-cond', to: 'alu-in', val: '0'}, status: "0 -> Вхід B", iter: "Ітерація 3 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'0'}], slice: null, lamps: [], alu: {in: '0 , 0', res: '--'}, skipped: [], cue: "Константа '0' подається у вхід B CPU." },
+    { tok: 'tok-gt', conductor: true, hand: '(порожньо)', status: "Порівняння 0 > 0", iter: "Ітерація 3 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'0'}], slice: null, lamps: [], alu: {in: '0 > 0', res: 'FALSE', act: true}, skipped: [], cue: "CPU порівнює: 0 > 0. Результат: FALSE (0 / ХИБА)!" },
+    { tok: 'tok-gt', conductor: true, hand: 'FALSE', fly: {from: 'alu-res', to: 'conductor-box', val: 'FALSE'}, status: "Прапорець FALSE", iter: "Ітерація 3 (перевірка)", ledger: [{v:'x', r:'#00..07', val:'0'}], slice: null, lamps: [], alu: {in: '0 > 0', res: 'FALSE'}, skipped: [], cue: "Прапорець FALSE летить до Інтерпретатора." },
+
+    // СТРИБОК УПЕРЕД (ВИХІД З ЦИКЛУ)
+    { tok: null, conductor: true, hand: 'FALSE', status: "ВИХІД З ЦИКЛУ: Стрибок повз рядок 3", iter: "Вихід із циклу", ledger: [{v:'x', r:'#00..07', val:'0'}], slice: null, lamps: [], alu: null, skipped: ['line-3'], cue: "УМОВА ХИБНА! Інтерпретатор перериває цикл і перестрибує рядок 3!" },
+
+    // РЯДОК 4: done = 1
+    { tok: 'tok-done', conductor: true, hand: '(порожньо)', status: "Рядок 4: Оголошення done", iter: "За межами циклу", ledger: [{v:'x', r:'#00..07', val:'0'}], slice: null, lamps: [], alu: null, skipped: [], cue: "Рядок 4: Виконання продовжується після циклу. Оголошуємо 'done'." },
+    { tok: 'tok-done', conductor: true, hand: '(порожньо)', status: "Виділення пам'яті для done", iter: "За межами циклу", ledger: [{v:'x', r:'#00..07', val:'0'}, {v:'done', r:'#08..15', val:'?'}], slice: 'byte-1', lamps: [], alu: null, skipped: [], cue: "Виділяємо байт 1 (#08..15) під змінну 'done'." },
+    { tok: 'tok-1-done', conductor: true, hand: '1', fly: {from: 'tok-1-done', to: 'conductor-hand', val: '1'}, status: "Вилучення 1", iter: "За межами циклу", ledger: [{v:'x', r:'#00..07', val:'0'}, {v:'done', r:'#08..15', val:'?'}], slice: null, lamps: [], alu: null, skipped: [], cue: "Константа '1' вилучається з коду." },
+    { tok: 'tok-1-done', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'byte-1', val: '1'}, status: "Запис 1 у байт 1", iter: "За межами циклу", ledger: [{v:'x', r:'#00..07', val:'0'}, {v:'done', r:'#08..15', val:'?'}], slice: 'byte-1', lamps: [], alu: null, skipped: [], cue: "Число '1' шиною летить у байт 1." },
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Лампа done увімкнена", iter: "За межами циклу", ledger: [{v:'x', r:'#00..07', val:'0'}, {v:'done', r:'#08..15', val:'1'}], slice: null, lamps: [8], alu: null, skipped: [], cue: "Лампа 2^0 у байті 1 клацає: УВІМК. done = 1!" },
+    { tok: null, conductor: false, hand: '(спокій)', status: "Програму завершено", iter: "Завершено", ledger: [{v:'x', r:'#00..07', val:'0'}, {v:'done', r:'#08..15', val:'1'}], slice: null, lamps: [8], alu: null, skipped: [], cue: "Кінець програми. Цикл виконав 2 ітерації та коректно завершився." }
+];
+
+let curIdx = 0;
+
+function renderFrame(idx) {
+    const f = frames[idx];
+
+    // 1. Фокус токена (Program Counter)
+    document.querySelectorAll('.tok').forEach(el => el.classList.remove('pc-focus'));
+    if (f.tok) {
+        const el = document.getElementById(f.tok);
+        if (el) el.classList.add('pc-focus');
+    }
+
+    // 2. Пропущені рядки
+    document.querySelectorAll('.code-line').forEach(el => el.classList.remove('skipped'));
+    if (f.skipped && f.skipped.length > 0) {
+        f.skipped.forEach(lineId => {
+            const lineEl = document.getElementById(lineId);
+            if (lineEl) lineEl.classList.add('skipped');
+        });
+    }
+
+    // 3. Інтерпретатор
+    const cbox = document.getElementById('conductor-box');
+    if (f.conductor) cbox.classList.add('active');
+    else cbox.classList.remove('active');
+    document.getElementById('conductor-hand').textContent = `Утримує: ${f.hand}`;
+    document.getElementById('status-text').textContent = f.status;
+    document.getElementById('iter-badge').textContent = f.iter;
+
+    // 4. Карта пам'яті
+    const tbody = document.getElementById('ledger-body');
+    if (!f.ledger || f.ledger.length === 0) {
+        tbody.innerHTML = '<tr id="ledger-none"><td colspan="3" style="text-align: center; color: var(--muted);">- Порожньо -</td></tr>';
+    } else {
+        tbody.innerHTML = f.ledger.map(row => `
+            <tr class="ledger-row ${row.act ? 'active' : ''}">
+                <td><strong>${row.v}</strong></td>
+                <td>${row.r}</td>
+                <td>${row.val}</td>
+            </tr>
+        `).join('');
+    }
+
+    // 5. Підсвітка ділянки пам'яті
+    document.querySelectorAll('.byte-row').forEach(el => el.classList.remove('slice-focus'));
+    if (f.slice) {
+        const sel = document.getElementById(f.slice);
+        if (sel) sel.classList.add('slice-focus');
+    }
+
+    // 6. Лампи
+    for (let i = 0; i < 48; i++) {
+        const el = document.getElementById(`lunit-${i}`);
+        if (el) {
+            if (f.lamps.includes(i)) el.classList.add('lit');
+            else el.classList.remove('lit');
+        }
+    }
+
+    // 7. CPU
+    const alu = document.getElementById('alu-unit');
+    if (f.alu) {
+        if (f.alu.act) alu.classList.add('active');
+        else alu.classList.remove('active');
+        document.getElementById('alu-in').textContent = f.alu.in;
+        document.getElementById('alu-res').textContent = f.alu.res;
+    } else {
+        alu.classList.remove('active');
+        document.getElementById('alu-in').textContent = '-- , --';
+        document.getElementById('alu-res').textContent = '--';
+    }
+
+    // 8. Підказка
+    document.getElementById('cue').textContent = f.cue;
+    document.getElementById('step-counter').textContent = `Крок ${idx} / ${frames.length - 1}`;
+    document.getElementById('next-btn').disabled = (idx >= frames.length - 1);
+
+    // 9. Анімація польоту
+    if (f.fly) {
+        fly(f.fly.from, f.fly.to, f.fly.val);
+    }
+}
+
+function stepForward() {
+    if (curIdx < frames.length - 1) {
+        curIdx++;
+        renderFrame(curIdx);
+    }
+}
+
+function stepBackward() {
+    if (curIdx > 0) {
+        curIdx--;
+        renderFrame(curIdx);
+    }
+}
+
+function resetFrames() {
+    curIdx = 0;
+    renderFrame(0);
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault();
+        stepForward();
+    } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        stepBackward();
+    }
+});
+
+renderFrame(0);
+</script>
+
+</body>
+</html>

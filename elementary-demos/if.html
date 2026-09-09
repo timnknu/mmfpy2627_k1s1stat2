@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Як працює if / else та сходження гілок (r = y + 0)</title>
+<style>
+    :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --muted: #64748b;
+        --pc-glow: #fde047;
+        --pc-border: #ca8a04;
+        --conductor: #7c3aed;
+        --lamp-gold: #f59e0b;
+        --slice-active: rgba(99, 102, 241, 0.12);
+        --slice-border: #6366f1;
+    }
+
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 20px; background: var(--bg); color: var(--text); user-select: none; }
+
+    /* Верхня панель */
+    .top-bar {
+        max-width: 1260px; margin: 0 auto 16px auto; display: flex;
+        justify-content: space-between; align-items: center; background: var(--card-bg);
+        padding: 10px 20px; border-radius: 10px; border: 1px solid var(--border);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .btn-group { display: flex; gap: 8px; align-items: center; }
+    button {
+        background: #0284c7; color: #fff; border: none; padding: 8px 16px;
+        border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;
+        transition: background 0.15s, transform 0.05s;
+    }
+    button:hover { background: #0369a1; }
+    button:active { transform: scale(0.98); }
+    button:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
+    button.secondary { background: #f1f5f9; color: var(--text); border: 1px solid var(--border); }
+    button.secondary:hover { background: #e2e8f0; }
+
+    /* Перемикач сценаріїв */
+    .scenario-btn {
+        background: #ede9fe; color: var(--conductor); border: 1px solid #c4b5fd;
+        padding: 6px 12px; font-size: 12px; border-radius: 6px; font-weight: bold; cursor: pointer;
+    }
+    .scenario-btn.active {
+        background: var(--conductor); color: #fff; border-color: var(--conductor);
+    }
+
+    .step-badge { font-size: 12px; font-weight: bold; color: var(--muted); padding: 0 8px; }
+    .presenter-cue { font-size: 14px; font-weight: 600; color: var(--conductor); }
+
+    /* Основна сітка */
+    .stage {
+        max-width: 1260px; margin: 0 auto; display: grid;
+        grid-template-columns: 260px 320px 1fr; gap: 16px;
+    }
+    .card {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+        position: relative;
+    }
+    .card-title {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.8px; color: var(--muted); margin-bottom: 10px;
+    }
+
+    /* Код */
+    .code-editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; line-height: 2.2; }
+    .code-line { white-space: pre; transition: opacity 0.3s; }
+    .code-line.skipped { opacity: 0.25; text-decoration: line-through; }
+    .tok {
+        padding: 2px 5px; border-radius: 4px; transition: all 0.2s;
+        display: inline-block; border: 1px solid transparent;
+    }
+    .tok.pc-focus {
+        background: var(--pc-glow); border-color: var(--pc-border);
+        font-weight: bold; box-shadow: 0 0 8px rgba(250, 204, 21, 0.6);
+        transform: scale(1.06);
+    }
+
+    /* Інтерпретатор */
+    .conductor-box {
+        border: 2px solid #cbd5e1; border-radius: 8px;
+        padding: 12px; transition: all 0.25s; background: #faf5ff; text-align: center;
+    }
+    .conductor-box.active {
+        border-color: var(--conductor);
+        box-shadow: 0 0 16px rgba(124, 58, 237, 0.25);
+        background: #f3e8ff;
+    }
+    .conductor-title { font-size: 12px; font-weight: 800; color: var(--conductor); letter-spacing: 0.5px; }
+    .conductor-hand {
+        margin-top: 8px; padding: 6px; border-radius: 6px; background: #fff;
+        border: 1px dashed #d8b4fe; font-size: 12px; font-family: monospace; min-height: 28px;
+        display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--conductor);
+    }
+    .branch-status {
+        margin-top: 6px; font-size: 11px; font-weight: bold; color: var(--muted);
+    }
+
+    /* Карта пам'яті */
+    .ledger-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+    .ledger-table th, .ledger-table td { border: 1px solid var(--border); padding: 5px 6px; text-align: left; }
+    .ledger-table th { background: #f8fafc; color: var(--muted); }
+    .ledger-row.active { background: #e0e7ff; font-weight: bold; }
+
+    /* CPU / АЛП */
+    .cpu-chassis {
+        margin-top: 14px; border: 2px solid #0284c7; border-radius: 8px;
+        background: #f0f9ff; padding: 10px;
+    }
+    .cpu-chassis-title {
+        font-size: 11px; font-weight: 800; color: #0369a1; text-transform: uppercase;
+        letter-spacing: 0.5px; margin-bottom: 6px; display: flex; justify-content: space-between;
+    }
+    .alu-unit {
+        border: 1px solid #bae6fd; border-radius: 6px;
+        padding: 8px; background: #ffffff; font-size: 12px; transition: all 0.2s;
+    }
+    .alu-unit.active {
+        border-color: #0284c7; box-shadow: 0 0 10px rgba(2, 132, 199, 0.3); background: #e0f2fe;
+    }
+    .alu-row { display: flex; justify-content: space-between; font-family: monospace; }
+    .alu-val { font-weight: bold; color: #0284c7; }
+
+    /* Пам'ять (поле ламп) */
+    .memory-stage { display: flex; flex-direction: column; gap: 10px; }
+    .byte-row {
+        position: relative; display: flex; gap: 4px; padding: 8px 10px;
+        border-radius: 8px; border: 1px solid transparent; transition: all 0.3s;
+    }
+    .byte-row.slice-focus {
+        background: var(--slice-active); border-color: var(--slice-border);
+        box-shadow: 0 0 12px rgba(99, 102, 241, 0.15);
+    }
+    .byte-label {
+        position: absolute; left: -60px; top: 18px; font-size: 10px;
+        font-family: monospace; color: var(--muted); font-weight: 600;
+    }
+
+    /* Настільна лампа */
+    .lamp-unit { display: flex; flex-direction: column; align-items: center; width: 34px; }
+    .lamp-svg { width: 34px; height: 42px; overflow: visible; }
+    .lamp-idx { font-size: 9px; font-family: monospace; color: #94a3b8; margin-top: 2px; }
+
+    .lamp-glow { opacity: 0; transition: opacity 0.25s; filter: blur(3px); fill: var(--lamp-gold); }
+    .lamp-shade { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 1.5; transition: all 0.25s; }
+    .lamp-bulb { fill: #e2e8f0; transition: all 0.25s; }
+    .lamp-stem, .lamp-base { stroke: #64748b; stroke-width: 2; fill: #f8fafc; }
+    .lamp-cord { stroke: #94a3b8; stroke-width: 1.2; }
+
+    /* Увімкнено */
+    .lit .lamp-glow { opacity: 0.85; }
+    .lit .lamp-shade { fill: #f59e0b; stroke: #d97706; }
+    .lit .lamp-bulb { fill: #fff; filter: drop-shadow(0 0 4px #fbbf24); }
+    .lit .lamp-unit { transform: translateY(-1px); }
+
+    /* Фонові ряди ламп */
+    .faded-memory {
+        opacity: 0.45; pointer-events: none;
+        mask-image: linear-gradient(to bottom, black 50%, rgba(0,0,0,0.5) 80%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, black 50%, rgba(0,0,0,0.5) 80%, transparent 100%);
+    }
+
+    /* Анімована точка польоту */
+    #flying-dot {
+        position: fixed; width: 28px; height: 28px; border-radius: 50%;
+        background: #fff; border: 2px solid var(--conductor); color: var(--conductor);
+        box-shadow: 0 0 14px var(--conductor); display: flex; align-items: center;
+        justify-content: center; font-size: 11px; font-weight: 800;
+        pointer-events: none; opacity: 0; z-index: 1000;
+    }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+    <div class="btn-group">
+        <button class="secondary" onclick="stepBackward()">&lt; Назад</button>
+        <button id="next-btn" onclick="stepForward()">Наступний крок &gt;</button>
+        <button class="secondary" onclick="resetFrames()">Скинути</button>
+        <span class="step-badge" id="step-counter">Крок 0 / 33</span>
+    </div>
+
+    <!-- Перемикач гілок -->
+    <div class="btn-group" style="margin-left: 20px;">
+        <span style="font-size: 11px; font-weight: bold; color: var(--muted);">СЦЕНАРІЙ:</span>
+        <button id="btn-false" class="scenario-btn active" onclick="switchScenario('false')">Умова FALSE (x = 3)</button>
+        <button id="btn-true" class="scenario-btn" onclick="switchScenario('true')">Умова TRUE (x = 8)</button>
+    </div>
+
+    <div id="cue" class="presenter-cue">Готово. Натисніть «Наступний крок».</div>
+</div>
+
+<div class="stage">
+    <!-- КОЛОНКА 1: КОД -->
+    <div class="card">
+        <div class="card-title">Файл myprog.py</div>
+        <div class="code-editor">
+            <div id="line-1" class="code-line">1: <span id="tok-x1" class="tok">x</span> = <span id="tok-val-x" class="tok">3</span></div>
+            <div id="line-2" class="code-line">2: <span id="tok-if" class="tok">if</span> <span id="tok-x-cond" class="tok">x</span> <span id="tok-gt">&gt;</span> <span id="tok-5" class="tok">5</span>:</div>
+            <div id="line-3" class="code-line">3:     <span id="tok-y-if" class="tok">y</span> = <span id="tok-9" class="tok">9</span></div>
+            <div id="line-4" class="code-line">4: <span id="tok-else" class="tok">else:</span></div>
+            <div id="line-5" class="code-line">5:     <span id="tok-y-else" class="tok">y</span> = <span id="tok-1" class="tok">1</span></div>
+            <div id="line-6" class="code-line">6: <span id="tok-r" class="tok">r</span> = <span id="tok-y-src" class="tok">y</span> <span id="tok-plus-r">+</span> <span id="tok-zero-r">0</span></div>
+        </div>
+    </div>
+
+    <!-- КОЛОНКА 2: ВИКОНАВЧИЙ ЦЕНТР -->
+    <div class="card">
+        <div class="card-title">Виконавчий центр</div>
+
+        <div id="conductor-box" class="conductor-box">
+            <div class="conductor-title">ІНТЕРПРЕТАТОР PYTHON</div>
+            <div id="conductor-hand" class="conductor-hand">Утримує: (порожньо)</div>
+            <div id="branch-status" class="branch-status">Вказівник: рядок 1</div>
+        </div>
+
+        <div class="card-title" style="margin-top: 14px; margin-bottom: 4px;">Карта пам'яті (бухгалтерія)</div>
+        <table class="ledger-table">
+            <thead>
+                <tr>
+                    <th>Змінна</th>
+                    <th>Адреси</th>
+                    <th>Значення</th>
+                </tr>
+            </thead>
+            <tbody id="ledger-body">
+                <tr id="ledger-none"><td colspan="3" style="text-align: center; color: var(--muted);">- Порожньо -</td></tr>
+            </tbody>
+        </table>
+
+        <div class="cpu-chassis">
+            <div class="cpu-chassis-title">
+                <span>CPU / АЛП</span>
+                <span style="font-size: 9px; color: #0284c7;">ОБЧИСЛЮВАЧ / КОМПАРАТОР</span>
+            </div>
+            <div id="alu-unit" class="alu-unit">
+                <div class="alu-row"><span>Входи:</span> <span id="alu-in" class="alu-val">-- , --</span></div>
+                <div class="alu-row" style="margin-top: 4px;"><span>Результат:</span> <span id="alu-res" class="alu-val">--</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- КОЛОНКА 3: ЛАМПИ -->
+    <div class="card" style="padding-left: 70px;">
+        <div class="card-title" style="display: flex; justify-content: space-between;">
+            <span>Фізична пам'ять (поле настільних ламп)</span>
+            <span style="color: var(--muted); font-size: 10px;">( ) ВИМК &nbsp;&nbsp; (*) УВІМК</span>
+        </div>
+
+        <div class="memory-stage">
+            <!-- Байт 0: x -->
+            <div id="byte-0" class="byte-row">
+                <div class="byte-label">#00..07 [x]</div>
+                <div id="lamps-b0" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Байт 1: y -->
+            <div id="byte-1" class="byte-row">
+                <div class="byte-label">#08..15 [y]</div>
+                <div id="lamps-b1" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Байт 2: r -->
+            <div id="byte-2" class="byte-row">
+                <div class="byte-label">#16..23 [r]</div>
+                <div id="lamps-b2" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Байт 3: вільний -->
+            <div id="byte-3" class="byte-row">
+                <div class="byte-label">#24..31</div>
+                <div id="lamps-b3" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Фонові лампи -->
+            <div class="faded-memory">
+                <div class="byte-row"><div class="byte-label">#32..39</div><div id="lamps-b4" style="display: flex; gap: 4px;"></div></div>
+                <div class="byte-row"><div class="byte-label">#40..47</div><div id="lamps-b5" style="display: flex; gap: 4px;"></div></div>
+            </div>
+        </div>
+        <div style="font-size: 10px; color: var(--muted); text-align: center; margin-top: 8px;">
+            ↓ Мільйони вільних настільних ламп простягаються далі по кристалу ↓
+        </div>
+    </div>
+</div>
+
+<div id="flying-dot"></div>
+
+<script>
+function createLampSVG(id, power) {
+    return `
+    <div class="lamp-unit" id="lunit-${id}">
+        <svg class="lamp-svg" viewBox="0 0 34 42">
+            <circle class="lamp-glow" cx="17" cy="16" r="14" />
+            <ellipse class="lamp-base" cx="17" cy="38" rx="13" ry="2.5" />
+            <line class="lamp-stem" x1="17" y1="38" x2="17" y2="16" />
+            <line class="lamp-cord" x1="21" y1="18" x2="21" y2="25" />
+            <circle cx="21" cy="25" r="1.3" fill="#64748b" />
+            <circle class="lamp-bulb" cx="17" cy="16" r="3.2" />
+            <polygon class="lamp-shade" points="10,5 24,5 30,18 4,18" />
+        </svg>
+        <span class="lamp-idx">2<sup>${power}</sup></span>
+    </div>`;
+}
+
+function fillRow(containerId, startIdx) {
+    let html = '';
+    for (let i = 7; i >= 0; i--) html += createLampSVG(startIdx + i, i);
+    document.getElementById(containerId).innerHTML = html;
+}
+
+fillRow('lamps-b0', 0);
+fillRow('lamps-b1', 8);
+fillRow('lamps-b2', 16);
+fillRow('lamps-b3', 24);
+fillRow('lamps-b4', 32);
+fillRow('lamps-b5', 40);
+
+function fly(fromId, toId, text, cb) {
+    const fromEl = document.getElementById(fromId);
+    const toEl = document.getElementById(toId);
+    if (!fromEl || !toEl) { if (cb) cb(); return; }
+
+    const from = fromEl.getBoundingClientRect();
+    const to = toEl.getBoundingClientRect();
+    const dot = document.getElementById('flying-dot');
+
+    dot.style.transition = 'none';
+    dot.textContent = text;
+    dot.style.left = `${from.left + from.width/2 - 14}px`;
+    dot.style.top = `${from.top + from.height/2 - 14}px`;
+    dot.style.opacity = '1';
+    dot.style.transform = 'scale(1.25)';
+
+    void dot.offsetWidth;
+
+    setTimeout(() => {
+        dot.style.transition = 'top 0.48s cubic-bezier(0.2, 0.8, 0.2, 1), left 0.48s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.48s ease';
+        dot.style.left = `${to.left + to.width/2 - 14}px`;
+        dot.style.top = `${to.top + to.height/2 - 14}px`;
+        dot.style.transform = 'scale(1)';
+    }, 40);
+
+    setTimeout(() => {
+        dot.style.transition = 'opacity 0.15s';
+        dot.style.opacity = '0';
+        if (cb) cb();
+    }, 540);
+}
+
+// -------------------------------------------------------------
+// СЦЕНАРІЙ 1: FALSE (x = 3) -> пропускає if, виконує else, рахує r = 1 + 0 = 1
+// -------------------------------------------------------------
+const framesFalse = [
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Вказівник: рядок 1", ledger: [], slice: null, lamps: [], alu: null, skipped: [], cue: "Готово. Запускаємо гілку з x = 3." },
+
+    // 1: x = 3
+    { tok: 'tok-x1', conductor: true, hand: '(порожньо)', status: "Рядок 1: Оголошення x", ledger: [], slice: null, lamps: [], alu: null, skipped: [], cue: "Інтерпретатор зустрічає змінну 'x'." },
+    { tok: 'tok-x1', conductor: true, hand: '(порожньо)', status: "Виділення пам'яті для x", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: 'byte-0', lamps: [], alu: null, skipped: [], cue: "У карті пам'яті резервується байт 0 (#00..07)." },
+    { tok: 'tok-val-x', conductor: true, hand: '(порожньо)', status: "Зчитування константи 3", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: null, lamps: [], alu: null, skipped: [], cue: "Вказівник переходить до константи '3' у файлі." },
+    { tok: 'tok-val-x', conductor: true, hand: '3', fly: {from: 'tok-val-x', to: 'conductor-hand', val: '3'}, status: "Вилучення 3", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: null, lamps: [], alu: null, skipped: [], cue: "Константа '3' вилучається з тексту коду." },
+    { tok: 'tok-val-x', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'byte-0', val: '3'}, status: "Запис 3 у байт 0", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: 'byte-0', lamps: [], alu: null, skipped: [], cue: "Число '3' летить шиною в пам'ять." },
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Лампи увімкнено", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: null, skipped: [], cue: "Лампи 2^0 і 2^1 клацають УВІМК (2+1=3)." },
+
+    // 2: if x > 5:
+    { tok: 'tok-if', conductor: true, hand: '(порожньо)', status: "Рядок 2: Зустріли 'if'", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: null, skipped: [], cue: "Інтерпретатор зупиняється на 'if'. Попереду розвилка." },
+    { tok: 'tok-x-cond', conductor: true, hand: '(порожньо)', status: "Зчитування x", ledger: [{v:'x', r:'#00..07', val:'3', act:true}], slice: 'byte-0', lamps: [0, 1], alu: null, skipped: [], cue: "Інтерпретатор дивиться в карту пам'яті за адресою 'x'." },
+    { tok: 'tok-x-cond', conductor: true, hand: '(порожньо)', fly: {from: 'byte-0', to: 'alu-in', val: '3'}, status: "Завантаження x в CPU", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: {in: '3 , --', res: '--'}, skipped: [], cue: "Поточний стан 'x' (3) летить у вхід A CPU." },
+    { tok: 'tok-gt', conductor: true, hand: '(порожньо)', status: "Оператор '>'", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: {in: '3 > ?', res: '--'}, skipped: [], cue: "Компаратор налаштовується на операцію '>'." },
+    { tok: 'tok-5', conductor: true, hand: '(порожньо)', status: "Константа 5", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: {in: '3 > ?', res: '--'}, skipped: [], cue: "Вказівник переходить до константи '5' у коді." },
+    { tok: 'tok-5', conductor: true, hand: '5', fly: {from: 'tok-5', to: 'conductor-hand', val: '5'}, status: "Вилучення 5", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: {in: '3 > ?', res: '--'}, skipped: [], cue: "Константа '5' береться з тексту програми." },
+    { tok: 'tok-5', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'alu-in', val: '5'}, status: "Завантаження 5 в CPU", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: {in: '3 , 5', res: '--'}, skipped: [], cue: "Число '5' завантажується у вхід B CPU." },
+    { tok: 'tok-gt', conductor: true, hand: '(порожньо)', status: "Порівняння 3 > 5", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: {in: '3 > 5', res: 'FALSE', act: true}, skipped: [], cue: "CPU порівнює: 3 > 5. Результат: FALSE (0 / Хиба)." },
+    { tok: 'tok-gt', conductor: true, hand: 'FALSE', fly: {from: 'alu-res', to: 'conductor-box', val: 'FALSE'}, status: "Сигнал прапорця", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: {in: '3 > 5', res: 'FALSE'}, skipped: [], cue: "CPU надсилає сигнал прапорця FALSE до Інтерпретатора." },
+
+    // 3: Стрибок через if
+    { tok: null, conductor: true, hand: 'FALSE', status: "Рішення: СТРИБОК через if", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: null, skipped: ['line-3'], cue: "УМОВА ХИБНА! Інтерпретатор вирішує: пропустити рядок 3!" },
+    { tok: 'tok-else', conductor: true, hand: '(порожньо)', status: "Стрибок до else (рядок 4)", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: null, skipped: ['line-3'], cue: "Вказівник команд перестрибує тіло if прямо на 'else:'." },
+
+    // 4: else: y = 1
+    { tok: 'tok-y-else', conductor: true, hand: '(порожньо)', status: "Рядок 5: Оголошення y", ledger: [{v:'x', r:'#00..07', val:'3'}], slice: null, lamps: [0, 1], alu: null, skipped: ['line-3'], cue: "Інтерпретатор заходить у гілку else до змінної 'y'." },
+    { tok: 'tok-y-else', conductor: true, hand: '(порожньо)', status: "Виділення пам'яті для y", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'?'}], slice: 'byte-1', lamps: [0, 1], alu: null, skipped: ['line-3'], cue: "Під 'y' виділяється байт 1 (#08..15)." },
+    { tok: 'tok-1', conductor: true, hand: '(порожньо)', status: "Зчитування константи 1", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'?'}], slice: null, lamps: [0, 1], alu: null, skipped: ['line-3'], cue: "Вказівник переходить до константи '1'." },
+    { tok: 'tok-1', conductor: true, hand: '1', fly: {from: 'tok-1', to: 'conductor-hand', val: '1'}, status: "Вилучення 1", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'?'}], slice: null, lamps: [0, 1], alu: null, skipped: ['line-3'], cue: "Константа '1' вилучається з рядка 5." },
+    { tok: 'tok-1', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'byte-1', val: '1'}, status: "Запис 1 у байт 1", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'?'}], slice: 'byte-1', lamps: [0, 1], alu: null, skipped: ['line-3'], cue: "Число '1' шиною летить у байт 1." },
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Лампи y увімкнено", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1'}], slice: null, lamps: [0, 1, 8], alu: null, skipped: ['line-3'], cue: "Лампа 2^0 у байті 1 клацає: УВІМК. y отримало значення 1!" },
+
+    // 5: РЯДОК 6: r = y + 0 (ТОЧКА СХОДЖЕННЯ ГІЛОК!)
+    { tok: 'tok-r', conductor: true, hand: '(порожньо)', status: "Рядок 6: Сходження гілок!", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1'}], slice: null, lamps: [0, 1, 8], alu: null, skipped: [], cue: "РЯДОК 6: Гілки зійшлися! Інтерпретатор зустрічає змінну 'r'." },
+    { tok: 'tok-r', conductor: true, hand: '(порожньо)', status: "Виділення пам'яті для r", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1'}, {v:'r', r:'#16..23', val:'?'}], slice: 'byte-2', lamps: [0, 1, 8], alu: null, skipped: [], cue: "Виділяємо новий байт 2 (#16..23) під результат 'r'." },
+    { tok: 'tok-y-src', conductor: true, hand: '(порожньо)', status: "Зчитування y", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1', act:true}, {v:'r', r:'#16..23', val:'?'}], slice: 'byte-1', lamps: [0, 1, 8], alu: null, skipped: [], cue: "Зчитуємо стан ламп 'y'. Процесору байдуже, звідки вони запалилися!" },
+    { tok: 'tok-y-src', conductor: true, hand: '(порожньо)', fly: {from: 'byte-1', to: 'alu-in', val: '1'}, status: "Завантаження y (1) в CPU", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1'}, {v:'r', r:'#16..23', val:'?'}], slice: null, lamps: [0, 1, 8], alu: {in: '1 , --', res: '--'}, skipped: [], cue: "Значення '1' летить із пам'яті у вхід A CPU." },
+    { tok: 'tok-zero-r', conductor: true, hand: '(порожньо)', status: "Константа 0", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1'}, {v:'r', r:'#16..23', val:'?'}], slice: null, lamps: [0, 1, 8], alu: {in: '1 , --', res: '--'}, skipped: [], cue: "Вказівник переходить до константи '0' у рядку 6." },
+    { tok: 'tok-zero-r', conductor: true, hand: '0', fly: {from: 'tok-zero-r', to: 'conductor-hand', val: '0'}, status: "Вилучення 0", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1'}, {v:'r', r:'#16..23', val:'?'}], slice: null, lamps: [0, 1, 8], alu: {in: '1 , --', res: '--'}, skipped: [], cue: "Константа '0' вилучається безпосередньо з коду." },
+    { tok: 'tok-zero-r', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'alu-in', val: '0'}, status: "Завантаження 0 в CPU", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1'}, {v:'r', r:'#16..23', val:'?'}], slice: null, lamps: [0, 1, 8], alu: {in: '1 , 0', res: '--'}, skipped: [], cue: "Число '0' завантажується у вхід B CPU." },
+    { tok: 'tok-plus-r', conductor: true, hand: '(порожньо)', status: "Додавання 1 + 0", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1'}, {v:'r', r:'#16..23', val:'?'}], slice: null, lamps: [0, 1, 8], alu: {in: '1 , 0', res: '1', act: true}, skipped: [], cue: "CPU додає: 1 + 0 = 1." },
+    { tok: 'tok-r', conductor: true, hand: '(порожньо)', fly: {from: 'alu-res', to: 'byte-2', val: '1'}, status: "Запис у байт 2 (r)", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1'}, {v:'r', r:'#16..23', val:'?'}], slice: 'byte-2', lamps: [0, 1, 8], alu: {in: '-- , --', res: '--'}, skipped: [], cue: "Результат '1' летить шиною в байт 2." },
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Лампи r увімкнено", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1'}, {v:'r', r:'#16..23', val:'1'}], slice: null, lamps: [0, 1, 8, 16], alu: null, skipped: [], cue: "Лампа 2^0 у байті 2 клацає: УВІМК. r отримало значення 1!" },
+    { tok: null, conductor: false, hand: '(спокій)', status: "Завершено (r = 1)", ledger: [{v:'x', r:'#00..07', val:'3'}, {v:'y', r:'#08..15', val:'1'}, {v:'r', r:'#16..23', val:'1'}], slice: null, lamps: [0, 1, 8, 16], alu: null, skipped: [], cue: "Кінець програми. Гілки зійшлися: r = 1." }
+];
+
+// -------------------------------------------------------------
+// СЦЕНАРІЙ 2: TRUE (x = 8) -> виконує if, пропускає else, рахує r = 9 + 0 = 9
+// -------------------------------------------------------------
+const framesTrue = [
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Вказівник: рядок 1", ledger: [], slice: null, lamps: [], alu: null, skipped: [], cue: "Готово. Запускаємо гілку з x = 8." },
+
+    // 1: x = 8
+    { tok: 'tok-x1', conductor: true, hand: '(порожньо)', status: "Рядок 1: Оголошення x", ledger: [], slice: null, lamps: [], alu: null, skipped: [], cue: "Інтерпретатор зустрічає змінну 'x'." },
+    { tok: 'tok-x1', conductor: true, hand: '(порожньо)', status: "Виділення пам'яті для x", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: 'byte-0', lamps: [], alu: null, skipped: [], cue: "У карті пам'яті резервується байт 0 (#00..07)." },
+    { tok: 'tok-val-x', conductor: true, hand: '(порожньо)', status: "Зчитування константи 8", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: null, lamps: [], alu: null, skipped: [], cue: "Вказівник переходить до константи '8'." },
+    { tok: 'tok-val-x', conductor: true, hand: '8', fly: {from: 'tok-val-x', to: 'conductor-hand', val: '8'}, status: "Вилучення 8", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: null, lamps: [], alu: null, skipped: [], cue: "Константа '8' вилучається з коду." },
+    { tok: 'tok-val-x', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'byte-0', val: '8'}, status: "Запис 8 у байт 0", ledger: [{v:'x', r:'#00..07', val:'?'}], slice: 'byte-0', lamps: [], alu: null, skipped: [], cue: "Число '8' шиною летить у байт 0." },
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Лампи увімкнено", ledger: [{v:'x', r:'#00..07', val:'8'}], slice: null, lamps: [3], alu: null, skipped: [], cue: "Лампа 2^3 клацає УВІМК (2^3 = 8)." },
+
+    // 2: if x > 5:
+    { tok: 'tok-if', conductor: true, hand: '(порожньо)', status: "Рядок 2: Зустріли 'if'", ledger: [{v:'x', r:'#00..07', val:'8'}], slice: null, lamps: [3], alu: null, skipped: [], cue: "Інтерпретатор зупиняється на 'if'." },
+    { tok: 'tok-x-cond', conductor: true, hand: '(порожньо)', status: "Зчитування x", ledger: [{v:'x', r:'#00..07', val:'8', act:true}], slice: 'byte-0', lamps: [3], alu: null, skipped: [], cue: "Зчитуємо значення 'x' з карти пам'яті." },
+    { tok: 'tok-x-cond', conductor: true, hand: '(порожньо)', fly: {from: 'byte-0', to: 'alu-in', val: '8'}, status: "Завантаження x в CPU", ledger: [{v:'x', r:'#00..07', val:'8'}], slice: null, lamps: [3], alu: {in: '8 , --', res: '--'}, skipped: [], cue: "Значення '8' летить у вхід A CPU." },
+    { tok: 'tok-gt', conductor: true, hand: '(порожньо)', status: "Оператор '>'", ledger: [{v:'x', r:'#00..07', val:'8'}], slice: null, lamps: [3], alu: {in: '8 > ?', res: '--'}, skipped: [], cue: "Компаратор готується до перевірки '>'." },
+    { tok: 'tok-5', conductor: true, hand: '(порожньо)', status: "Константа 5", ledger: [{v:'x', r:'#00..07', val:'8'}], slice: null, lamps: [3], alu: {in: '8 > ?', res: '--'}, skipped: [], cue: "Вказівник переходить до константи '5'." },
+    { tok: 'tok-5', conductor: true, hand: '5', fly: {from: 'tok-5', to: 'conductor-hand', val: '5'}, status: "Вилучення 5", ledger: [{v:'x', r:'#00..07', val:'8'}], slice: null, lamps: [3], alu: {in: '8 > ?', res: '--'}, skipped: [], cue: "Константа '5' береться з тексту коду." },
+    { tok: 'tok-5', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'alu-in', val: '5'}, status: "Завантаження 5 в CPU", ledger: [{v:'x', r:'#00..07', val:'8'}], slice: null, lamps: [3], alu: {in: '8 , 5', res: '--'}, skipped: [], cue: "Число '5' завантажується у вхід B CPU." },
+    { tok: 'tok-gt', conductor: true, hand: '(порожньо)', status: "Порівняння 8 > 5", ledger: [{v:'x', r:'#00..07', val:'8'}], slice: null, lamps: [3], alu: {in: '8 > 5', res: 'TRUE', act: true}, skipped: [], cue: "CPU порівнює: 8 > 5. Результат: TRUE (1 / Істина)." },
+    { tok: 'tok-gt', conductor: true, hand: 'TRUE', fly: {from: 'alu-res', to: 'conductor-box', val: 'TRUE'}, status: "Сигнал прапорця", ledger: [{v:'x', r:'#00..07', val:'8'}], slice: null, lamps: [3], alu: {in: '8 > 5', res: 'TRUE'}, skipped: [], cue: "Прапорець TRUE летить до Інтерпретатора." },
+
+    // 3: Рішення: ВХІД у if
+    { tok: null, conductor: true, hand: 'TRUE', status: "Рішення: ВХІД у рядок 3", ledger: [{v:'x', r:'#00..07', val:'8'}], slice: null, lamps: [3], alu: null, skipped: [], cue: "УМОВА ІСТИННА! Інтерпретатор заходить у тіло if (рядок 3)." },
+
+    // 4: y = 9
+    { tok: 'tok-y-if', conductor: true, hand: '(порожньо)', status: "Рядок 3: Оголошення y", ledger: [{v:'x', r:'#00..07', val:'8'}], slice: null, lamps: [3], alu: null, skipped: [], cue: "Інтерпретатор фокусується на 'y'." },
+    { tok: 'tok-y-if', conductor: true, hand: '(порожньо)', status: "Виділення пам'яті для y", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'?'}], slice: 'byte-1', lamps: [3], alu: null, skipped: [], cue: "Під 'y' виділяється байт 1 (#08..15)." },
+    { tok: 'tok-9', conductor: true, hand: '(порожньо)', status: "Зчитування константи 9", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'?'}], slice: null, lamps: [3], alu: null, skipped: [], cue: "Вказівник переходить до константи '9'." },
+    { tok: 'tok-9', conductor: true, hand: '9', fly: {from: 'tok-9', to: 'conductor-hand', val: '9'}, status: "Вилучення 9", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'?'}], slice: null, lamps: [3], alu: null, skipped: [], cue: "Константа '9' береться з коду." },
+    { tok: 'tok-9', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'byte-1', val: '9'}, status: "Запис 9 у байт 1", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'?'}], slice: 'byte-1', lamps: [3], alu: null, skipped: [], cue: "Число '9' летить шиною в байт 1." },
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Лампи y увімкнено", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}], slice: null, lamps: [3, 8, 11], alu: null, skipped: [], cue: "Лампи 2^3 і 2^0 клацають УВІМК (8+1=9)." },
+
+    // 5: СТРИБОК через else
+    { tok: null, conductor: true, hand: '(спокій)', status: "СТРИБОК через else", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}], slice: null, lamps: [3, 8, 11], alu: null, skipped: ['line-4', 'line-5'], cue: "Тіло if виконано! Інтерпретатор перестрибує блок else (рядки 4-5)!" },
+
+    // 6: РЯДОК 6: r = y + 0 (ТОЧКА СХОДЖЕННЯ ГІЛОК!)
+    { tok: 'tok-r', conductor: true, hand: '(порожньо)', status: "Рядок 6: Сходження гілок!", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}], slice: null, lamps: [3, 8, 11], alu: null, skipped: ['line-4', 'line-5'], cue: "РЯДОК 6: Гілки зійшлися! Оголошуємо змінну 'r'." },
+    { tok: 'tok-r', conductor: true, hand: '(порожньо)', status: "Виділення пам'яті для r", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}, {v:'r', r:'#16..23', val:'?'}], slice: 'byte-2', lamps: [3, 8, 11], alu: null, skipped: ['line-4', 'line-5'], cue: "Під 'r' виділяється новий байт 2 (#16..23)." },
+    { tok: 'tok-y-src', conductor: true, hand: '(порожньо)', status: "Зчитування y", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9', act:true}, {v:'r', r:'#16..23', val:'?'}], slice: 'byte-1', lamps: [3, 8, 11], alu: null, skipped: ['line-4', 'line-5'], cue: "Зчитуємо стан ламп 'y'. Там горить 9!" },
+    { tok: 'tok-y-src', conductor: true, hand: '(порожньо)', fly: {from: 'byte-1', to: 'alu-in', val: '9'}, status: "Завантаження y (9) в CPU", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}, {v:'r', r:'#16..23', val:'?'}], slice: null, lamps: [3, 8, 11], alu: {in: '9 , --', res: '--'}, skipped: ['line-4', 'line-5'], cue: "Значення '9' летить із пам'яті у вхід A CPU." },
+    { tok: 'tok-zero-r', conductor: true, hand: '(порожньо)', status: "Константа 0", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}, {v:'r', r:'#16..23', val:'?'}], slice: null, lamps: [3, 8, 11], alu: {in: '9 , --', res: '--'}, skipped: ['line-4', 'line-5'], cue: "Вказівник переходить до константи '0' у рядку 6." },
+    { tok: 'tok-zero-r', conductor: true, hand: '0', fly: {from: 'tok-zero-r', to: 'conductor-hand', val: '0'}, status: "Вилучення 0", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}, {v:'r', r:'#16..23', val:'?'}], slice: null, lamps: [3, 8, 11], alu: {in: '9 , --', res: '--'}, skipped: ['line-4', 'line-5'], cue: "Константа '0' вилучається безпосередньо з коду." },
+    { tok: 'tok-zero-r', conductor: true, hand: '(порожньо)', fly: {from: 'conductor-box', to: 'alu-in', val: '0'}, status: "Завантаження 0 в CPU", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}, {v:'r', r:'#16..23', val:'?'}], slice: null, lamps: [3, 8, 11], alu: {in: '9 , 0', res: '--'}, skipped: ['line-4', 'line-5'], cue: "Число '0' завантажується у вхід B CPU." },
+    { tok: 'tok-plus-r', conductor: true, hand: '(порожньо)', status: "Додавання 9 + 0", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}, {v:'r', r:'#16..23', val:'?'}], slice: null, lamps: [3, 8, 11], alu: {in: '9 , 0', res: '9', act: true}, skipped: ['line-4', 'line-5'], cue: "CPU додає: 9 + 0 = 9." },
+    { tok: 'tok-r', conductor: true, hand: '(порожньо)', fly: {from: 'alu-res', to: 'byte-2', val: '9'}, status: "Запис у байт 2 (r)", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}, {v:'r', r:'#16..23', val:'?'}], slice: 'byte-2', lamps: [3, 8, 11], alu: {in: '-- , --', res: '--'}, skipped: ['line-4', 'line-5'], cue: "Результат '9' летить шиною в байт 2." },
+    { tok: null, conductor: false, hand: '(порожньо)', status: "Лампи r увімкнено", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}, {v:'r', r:'#16..23', val:'9'}], slice: null, lamps: [3, 8, 11, 16, 19], alu: null, skipped: ['line-4', 'line-5'], cue: "Лампи 2^3 і 2^0 у байті 2 клацають: УВІМК. r отримало значення 9!" },
+    { tok: null, conductor: false, hand: '(спокій)', status: "Завершено (r = 9)", ledger: [{v:'x', r:'#00..07', val:'8'}, {v:'y', r:'#08..15', val:'9'}, {v:'r', r:'#16..23', val:'9'}], slice: null, lamps: [3, 8, 11, 16, 19], alu: null, skipped: ['line-4', 'line-5'], cue: "Кінець програми. Гілки зійшлися: r = 9." }
+];
+
+let activeScenario = 'false';
+let currentFrames = framesFalse;
+let curIdx = 0;
+
+function switchScenario(scen) {
+    activeScenario = scen;
+    document.getElementById('btn-false').classList.toggle('active', scen === 'false');
+    document.getElementById('btn-true').classList.toggle('active', scen === 'true');
+
+    document.getElementById('tok-val-x').textContent = (scen === 'false') ? '3' : '8';
+
+    currentFrames = (scen === 'false') ? framesFalse : framesTrue;
+    curIdx = 0;
+    renderFrame(0);
+}
+
+function renderFrame(idx) {
+    const f = currentFrames[idx];
+
+    // 1. Фокус токена (Program Counter)
+    document.querySelectorAll('.tok').forEach(el => el.classList.remove('pc-focus'));
+    if (f.tok) {
+        const el = document.getElementById(f.tok);
+        if (el) el.classList.add('pc-focus');
+    }
+
+    // 2. Пропущені рядки коду
+    document.querySelectorAll('.code-line').forEach(el => el.classList.remove('skipped'));
+    if (f.skipped && f.skipped.length > 0) {
+        f.skipped.forEach(lineId => {
+            const lineEl = document.getElementById(lineId);
+            if (lineEl) lineEl.classList.add('skipped');
+        });
+    }
+
+    // 3. Інтерпретатор
+    const cbox = document.getElementById('conductor-box');
+    if (f.conductor) cbox.classList.add('active');
+    else cbox.classList.remove('active');
+    document.getElementById('conductor-hand').textContent = `Утримує: ${f.hand}`;
+    document.getElementById('branch-status').textContent = f.status;
+
+    // 4. Карта пам'яті
+    const tbody = document.getElementById('ledger-body');
+    if (!f.ledger || f.ledger.length === 0) {
+        tbody.innerHTML = '<tr id="ledger-none"><td colspan="3" style="text-align: center; color: var(--muted);">- Порожньо -</td></tr>';
+    } else {
+        tbody.innerHTML = f.ledger.map(row => `
+            <tr class="ledger-row ${row.act ? 'active' : ''}">
+                <td><strong>${row.v}</strong></td>
+                <td>${row.r}</td>
+                <td>${row.val}</td>
+            </tr>
+        `).join('');
+    }
+
+    // 5. Підсвітка ділянки пам'яті
+    document.querySelectorAll('.byte-row').forEach(el => el.classList.remove('slice-focus'));
+    if (f.slice) {
+        const sel = document.getElementById(f.slice);
+        if (sel) sel.classList.add('slice-focus');
+    }
+
+    // 6. Лампи
+    for (let i = 0; i < 48; i++) {
+        const el = document.getElementById(`lunit-${i}`);
+        if (el) {
+            if (f.lamps.includes(i)) el.classList.add('lit');
+            else el.classList.remove('lit');
+        }
+    }
+
+    // 7. CPU
+    const alu = document.getElementById('alu-unit');
+    if (f.alu) {
+        if (f.alu.act) alu.classList.add('active');
+        else alu.classList.remove('active');
+        document.getElementById('alu-in').textContent = f.alu.in;
+        document.getElementById('alu-res').textContent = f.alu.res;
+    } else {
+        alu.classList.remove('active');
+        document.getElementById('alu-in').textContent = '-- , --';
+        document.getElementById('alu-res').textContent = '--';
+    }
+
+    // 8. Підказка
+    document.getElementById('cue').textContent = f.cue;
+    document.getElementById('step-counter').textContent = `Крок ${idx} / ${currentFrames.length - 1}`;
+    document.getElementById('next-btn').disabled = (idx >= currentFrames.length - 1);
+
+    // 9. Анімація польоту
+    if (f.fly) {
+        fly(f.fly.from, f.fly.to, f.fly.val);
+    }
+}
+
+function stepForward() {
+    if (curIdx < currentFrames.length - 1) {
+        curIdx++;
+        renderFrame(curIdx);
+    }
+}
+
+function stepBackward() {
+    if (curIdx > 0) {
+        curIdx--;
+        renderFrame(curIdx);
+    }
+}
+
+function resetFrames() {
+    curIdx = 0;
+    renderFrame(0);
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault();
+        stepForward();
+    } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        stepBackward();
+    }
+});
+
+renderFrame(0);
+</script>
+
+</body>
+</html>

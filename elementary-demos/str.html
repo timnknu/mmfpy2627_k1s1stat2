@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Зберігання рядків (String / ASCII) на настільних лампах</title>
+<style>
+    :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --muted: #64748b;
+        --pc-glow: #fde047;
+        --pc-border: #ca8a04;
+        --conductor: #7c3aed;
+
+        /* Кольори для символів рядка */
+        --char-0: #059669;   /* Смарагдовий */
+        --char-1: #0284c7;   /* Синій */
+        --char-2: #8b5cf6;   /* Фіолетовий */
+        --char-3: #d97706;   /* Бурштиновий */
+        --lamp-gold: #f59e0b;
+        --slice-active: rgba(99, 102, 241, 0.12);
+        --slice-border: #6366f1;
+    }
+
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 20px; background: var(--bg); color: var(--text); user-select: none; }
+
+    /* Верхня панель */
+    .top-bar {
+        max-width: 1300px; margin: 0 auto 16px auto; display: flex;
+        justify-content: space-between; align-items: center; background: var(--card-bg);
+        padding: 10px 20px; border-radius: 10px; border: 1px solid var(--border);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03); flex-wrap: wrap; gap: 10px;
+    }
+    .btn-group { display: flex; gap: 8px; align-items: center; }
+    button {
+        background: #0284c7; color: #fff; border: none; padding: 8px 16px;
+        border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;
+        transition: background 0.15s, transform 0.05s;
+    }
+    button:hover { background: #0369a1; }
+    button:active { transform: scale(0.98); }
+    button:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
+    button.secondary { background: #f1f5f9; color: var(--text); border: 1px solid var(--border); }
+    button.secondary:hover { background: #e2e8f0; }
+
+    /* Поле довільного введення для лектора */
+    .live-input-box { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: bold; }
+    .live-input {
+        width: 90px; padding: 5px 8px; border-radius: 4px; border: 1px solid var(--border);
+        font-family: monospace; font-size: 13px; font-weight: bold; text-align: center;
+    }
+    .preset-btn {
+        background: #f1f5f9; color: var(--muted); border: 1px solid var(--border);
+        padding: 4px 8px; font-size: 11px; border-radius: 4px; cursor: pointer;
+    }
+    .preset-btn:hover { background: #e2e8f0; color: var(--text); }
+
+    .step-badge { font-size: 12px; font-weight: bold; color: var(--muted); padding: 0 8px; }
+    .presenter-cue { font-size: 14px; font-weight: 600; color: var(--conductor); width: 100%; margin-top: 4px; }
+
+    /* Основна сітка */
+    .stage {
+        max-width: 1300px; margin: 0 auto; display: grid;
+        grid-template-columns: 240px 360px 1fr; gap: 16px;
+    }
+    .card {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+        position: relative;
+    }
+    .card-title {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.8px; color: var(--muted); margin-bottom: 10px;
+    }
+
+    /* Код */
+    .code-editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; line-height: 2.2; }
+    .code-line { white-space: pre; }
+    .tok {
+        padding: 2px 5px; border-radius: 4px; transition: all 0.2s;
+        display: inline-block; border: 1px solid transparent;
+    }
+    .tok.pc-focus {
+        background: var(--pc-glow); border-color: var(--pc-border);
+        font-weight: bold; box-shadow: 0 0 8px rgba(250, 204, 21, 0.6);
+        transform: scale(1.06);
+    }
+
+    /* Інтерпретатор */
+    .conductor-box {
+        border: 2px solid #cbd5e1; border-radius: 8px;
+        padding: 12px; transition: all 0.25s; background: #faf5ff; text-align: center;
+    }
+    .conductor-box.active {
+        border-color: var(--conductor);
+        box-shadow: 0 0 16px rgba(124, 58, 237, 0.25);
+        background: #f3e8ff;
+    }
+    .conductor-title { font-size: 12px; font-weight: 800; color: var(--conductor); letter-spacing: 0.5px; }
+    .conductor-hand {
+        margin-top: 8px; padding: 6px; border-radius: 6px; background: #fff;
+        border: 1px dashed #d8b4fe; font-size: 12px; font-family: monospace; min-height: 28px;
+        display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--conductor);
+    }
+
+    /* Таблиця кодування символів */
+    .encoding-breakdown {
+        margin-top: 12px; border: 1px solid var(--border); border-radius: 8px;
+        padding: 10px; background: #f8fafc; font-size: 12px;
+    }
+    .char-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-family: monospace; font-size: 11px; }
+    .char-table th, .char-table td { border: 1px solid var(--border); padding: 4px 6px; text-align: center; }
+    .char-table th { background: #f1f5f9; color: var(--muted); font-size: 10px; }
+    .char-badge {
+        display: inline-block; padding: 1px 6px; border-radius: 4px; font-weight: bold; color: #fff;
+    }
+
+    /* Карта пам'яті */
+    .ledger-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+    .ledger-table th, .ledger-table td { border: 1px solid var(--border); padding: 5px 6px; text-align: left; }
+    .ledger-table th { background: #f8fafc; color: var(--muted); }
+    .ledger-row.active { background: #e0e7ff; font-weight: bold; }
+
+    /* Пам'ять (поле ламп) */
+    .memory-stage { display: flex; flex-direction: column; gap: 8px; }
+    .byte-row {
+        position: relative; display: flex; gap: 4px; padding: 6px 10px;
+        border-radius: 8px; border: 1px solid transparent; transition: all 0.3s;
+    }
+    .byte-row.slice-focus {
+        background: var(--slice-active); border-color: var(--slice-border);
+        box-shadow: 0 0 12px rgba(99, 102, 241, 0.15);
+    }
+    .byte-label {
+        position: absolute; left: -72px; top: 16px; font-size: 10px;
+        font-family: monospace; color: var(--muted); font-weight: 600;
+    }
+
+    /* Настільна лампа */
+    .lamp-unit { display: flex; flex-direction: column; align-items: center; width: 34px; position: relative; }
+    .lamp-svg { width: 34px; height: 42px; overflow: visible; }
+    .lamp-idx { font-size: 9px; font-family: monospace; color: #94a3b8; margin-top: 2px; }
+
+    .lamp-glow { opacity: 0; transition: opacity 0.25s; filter: blur(3px); fill: var(--lamp-gold); }
+    .lamp-shade { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 1.5; transition: all 0.25s; }
+    .lamp-bulb { fill: #e2e8f0; transition: all 0.25s; }
+    .lamp-stem, .lamp-base { stroke: #64748b; stroke-width: 2; fill: #f8fafc; }
+    .lamp-cord { stroke: #94a3b8; stroke-width: 1.2; }
+
+    /* Підсвітка належності байта до літери */
+    .byte-row.row-char-0 { border-left: 3px solid var(--char-0); }
+    .byte-row.row-char-1 { border-left: 3px solid var(--char-1); }
+    .byte-row.row-char-2 { border-left: 3px solid var(--char-2); }
+    .byte-row.row-char-3 { border-left: 3px solid var(--char-3); }
+
+    /* Увімкнено */
+    .lit .lamp-glow { opacity: 0.85; }
+    .lit .lamp-shade { fill: #f59e0b; stroke: #d97706; }
+    .lit .lamp-bulb { fill: #fff; filter: drop-shadow(0 0 4px #fbbf24); }
+    .lit .lamp-unit { transform: translateY(-1px); }
+
+    /* Фонові лампи */
+    .faded-memory {
+        opacity: 0.35; pointer-events: none;
+        mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+    }
+
+    /* Легенда байтів */
+    .legend-bar {
+        display: flex; gap: 12px; font-size: 11px; font-weight: bold; margin-bottom: 12px;
+        padding: 6px 10px; background: #f8fafc; border-radius: 6px; border: 1px solid var(--border);
+        flex-wrap: wrap;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+    /* Анімована точка польоту */
+    #flying-dot {
+        position: fixed; width: 28px; height: 28px; border-radius: 50%;
+        background: #fff; border: 2px solid var(--conductor); color: var(--conductor);
+        box-shadow: 0 0 14px var(--conductor); display: flex; align-items: center;
+        justify-content: center; font-size: 11px; font-weight: 800;
+        pointer-events: none; opacity: 0; z-index: 1000;
+    }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+    <div class="btn-group">
+        <button class="secondary" onclick="stepBackward()">&lt; Назад</button>
+        <button id="next-btn" onclick="stepForward()">Наступний крок &gt;</button>
+        <button class="secondary" onclick="resetFrames()">Скинути</button>
+        <span class="step-badge" id="step-counter">Крок 0 / 6</span>
+    </div>
+
+    <!-- Інтерактивне введення тексту -->
+    <div class="live-input-box">
+        <span>Ввести рядок (до 4 символів):</span>
+        <input type="text" id="custom-val" class="live-input" value="Kyiv" maxlength="4">
+        <button class="secondary" style="padding: 5px 10px;" onclick="applyCustomString()">Показати лампи</button>
+        <span style="color: var(--muted); margin-left: 6px;">Пресети:</span>
+        <button class="preset-btn" onclick="setPreset('Kyiv')">&quot;Kyiv&quot;</button>
+        <button class="preset-btn" onclick="setPreset('Math')">&quot;Math&quot;</button>
+        <button class="preset-btn" onclick="setPreset('Byte')">&quot;Byte&quot;</button>
+        <button class="preset-btn" onclick="setPreset('5555')">&quot;5555&quot;</button>
+        <button class="preset-btn" onclick="setPreset('A+B=')">&quot;A+B=&quot;</button>
+    </div>
+
+    <div id="cue" class="presenter-cue">Готово. Натисніть «Наступний крок».</div>
+</div>
+
+<div class="stage">
+    <!-- КОЛОНКА 1: МІНІМАЛЬНИЙ КОД -->
+    <div class="card">
+        <div class="card-title">Файл myprog.py</div>
+        <div class="code-editor">
+            <div id="line-1" class="code-line">1: <span id="tok-s" class="tok">s</span> = <span id="tok-val" class="tok">&quot;Kyiv&quot;</span></div>
+        </div>
+        <div style="font-size: 11px; color: var(--muted); margin-top: 15px; line-height: 1.5;">
+            Рядок (string) — це не єдине число, а <strong>масив байтів підряд</strong>.
+            Кожен символ займає рівно 1 байт (8 настільних ламп)!
+        </div>
+    </div>
+
+    <!-- КОЛОНКА 2: ВИКОНАВЧИЙ ЦЕНТР ТА ТАБЛИЦЯ КОДУВАННЯ -->
+    <div class="card">
+        <div class="card-title">Виконавчий центр</div>
+
+        <div id="conductor-box" class="conductor-box">
+            <div class="conductor-title">ІНТЕРПРЕТАТОР PYTHON</div>
+            <div id="conductor-hand" class="conductor-hand">Утримує: (порожньо)</div>
+        </div>
+
+        <!-- Таблиця розкладу символів -->
+        <div class="encoding-breakdown">
+            <div style="font-weight: bold; margin-bottom: 4px; color: var(--text);">
+                Таблиця кодування символів (ASCII / Unicode):
+            </div>
+            <table class="char-table">
+                <thead>
+                    <tr>
+                        <th>Байт</th>
+                        <th>Символ</th>
+                        <th>Код (10-й)</th>
+                        <th>Код (16-й)</th>
+                        <th>Двійковий код (лампи)</th>
+                    </tr>
+                </thead>
+                <tbody id="char-table-body">
+                    <!-- Заповнюється динамічно -->
+                </tbody>
+            </table>
+            <div id="encoding-note" style="margin-top: 6px; font-size: 10px; color: var(--muted); text-align: center;">
+                Кожен символ замінюється числом від 0 до 255.
+            </div>
+        </div>
+
+        <div class="card-title" style="margin-top: 14px; margin-bottom: 4px;">Карта пам'яті</div>
+        <table class="ledger-table">
+            <thead>
+                <tr>
+                    <th>Змінна</th>
+                    <th>Діапазон</th>
+                    <th>Розмір</th>
+                    <th>Значення</th>
+                </tr>
+            </thead>
+            <tbody id="ledger-body">
+                <tr id="ledger-none"><td colspan="4" style="text-align: center; color: var(--muted);">- Порожньо -</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- КОЛОНКА 3: 32 НАСТІЛЬНІ ЛАМПИ (4 БАЙТИ) -->
+    <div class="card" style="padding-left: 80px;">
+        <div class="card-title" style="display: flex; justify-content: space-between;">
+            <span>Фізична пам'ять (по 8 ламп на символ)</span>
+            <span style="color: var(--muted); font-size: 10px;">1 символ = 1 байт</span>
+        </div>
+
+        <!-- Легенда символів -->
+        <div class="legend-bar" id="legend-bar">
+            <!-- Заповнюється динамічно -->
+        </div>
+
+        <div class="memory-stage">
+            <!-- Байт 0 (символ 0) -->
+            <div id="byte-0" class="byte-row row-char-0">
+                <div id="label-b0" class="byte-label">Байт 0 [#00..07]</div>
+                <div id="lamps-b0" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Байт 1 (символ 1) -->
+            <div id="byte-1" class="byte-row row-char-1">
+                <div id="label-b1" class="byte-label">Байт 1 [#08..15]</div>
+                <div id="lamps-b1" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Байт 2 (символ 2) -->
+            <div id="byte-2" class="byte-row row-char-2">
+                <div id="label-b2" class="byte-label">Байт 2 [#16..23]</div>
+                <div id="lamps-b2" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Байт 3 (символ 3) -->
+            <div id="byte-3" class="byte-row row-char-3">
+                <div id="label-b3" class="byte-label">Байт 3 [#24..31]</div>
+                <div id="lamps-b3" style="display: flex; gap: 4px;"></div>
+            </div>
+
+            <!-- Напівпрозорий вільний сектор пам'яті -->
+            <div class="faded-memory" style="margin-top: 6px;">
+                <div class="byte-row">
+                    <div class="byte-label">Байт 4 [#вільний]</div>
+                    <div id="lamps-b4" style="display: flex; gap: 4px;"></div>
+                </div>
+            </div>
+        </div>
+        <div style="font-size: 10px; color: var(--muted); text-align: center; margin-top: 8px;">
+            ↓ Рядок — це неперервний ланцюжок байтів у кремнії. Комп'ютер читає його по 8 біт ↓
+        </div>
+    </div>
+</div>
+
+<div id="flying-dot"></div>
+
+<script>
+const CHAR_COLORS = ['var(--char-0)', 'var(--char-1)', 'var(--char-2)', 'var(--char-3)'];
+
+// Парсинг тексту в числовий масив ASCII / UTF-8
+function stringToBytes(str) {
+    const rawBytes = Array.from(new TextEncoder().encode(str)).slice(0, 4);
+    const chars = [];
+    const litIndices = [];
+
+    rawBytes.forEach((code, byteIdx) => {
+        const binStr = code.toString(2).padStart(8, '0');
+        const hexStr = '0x' + code.toString(16).toUpperCase().padStart(2, '0');
+        const charSymbol = str[byteIdx] || String.fromCharCode(code);
+
+        // Запалюємо лампи у відповідному рядку (від біта 2^7 до 2^0)
+        for (let bit = 0; bit < 8; bit++) {
+            if (binStr[bit] === '1') {
+                litIndices.push(byteIdx * 8 + bit);
+            }
+        }
+
+        chars.push({
+            byteIdx,
+            charSymbol,
+            code,
+            hexStr,
+            binStr
+        });
+    });
+
+    return {
+        text: str,
+        totalBytes: rawBytes.length,
+        chars,
+        litIndices
+    };
+}
+
+// Генерація однієї SVG-лампи
+function createLampSVG(screenIdx, bitPower) {
+    return `
+    <div class="lamp-unit" id="lunit-${screenIdx}">
+        <svg class="lamp-svg" viewBox="0 0 34 42">
+            <circle class="lamp-glow" cx="17" cy="16" r="14" />
+            <ellipse class="lamp-base" cx="17" cy="38" rx="13" ry="2.5" />
+            <line class="lamp-stem" x1="17" y1="38" x2="17" y2="16" />
+            <line class="lamp-cord" x1="21" y1="18" x2="21" y2="25" />
+            <circle cx="21" cy="25" r="1.3" fill="#64748b" />
+            <circle class="lamp-bulb" cx="17" cy="16" r="3.2" />
+            <polygon class="lamp-shade" points="10,5 24,5 30,18 4,18" />
+        </svg>
+        <span class="lamp-idx">2<sup>${bitPower}</sup></span>
+    </div>`;
+}
+
+function fillRow(containerId, startScreenIdx) {
+    let html = '';
+    for (let i = 0; i < 8; i++) {
+        html += createLampSVG(startScreenIdx + i, 7 - i);
+    }
+    document.getElementById(containerId).innerHTML = html;
+}
+
+fillRow('lamps-b0', 0);   // Байт 0: лампи 0..7
+fillRow('lamps-b1', 8);   // Байт 1: лампи 8..15
+fillRow('lamps-b2', 16);  // Байт 2: лампи 16..23
+fillRow('lamps-b3', 24);  // Байт 3: лампи 24..31
+fillRow('lamps-b4', 32);  // Вільний сектор
+
+function fly(fromId, toId, text, cb) {
+    const fromEl = document.getElementById(fromId);
+    const toEl = document.getElementById(toId);
+    if (!fromEl || !toEl) { if (cb) cb(); return; }
+
+    const from = fromEl.getBoundingClientRect();
+    const to = toEl.getBoundingClientRect();
+    const dot = document.getElementById('flying-dot');
+
+    dot.style.transition = 'none';
+    dot.textContent = text;
+    dot.style.left = `${from.left + from.width/2 - 14}px`;
+    dot.style.top = `${from.top + from.height/2 - 14}px`;
+    dot.style.opacity = '1';
+    dot.style.transform = 'scale(1.25)';
+
+    void dot.offsetWidth; // Force reflow
+
+    setTimeout(() => {
+        dot.style.transition = 'top 0.48s cubic-bezier(0.2, 0.8, 0.2, 1), left 0.48s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.48s ease';
+        dot.style.left = `${to.left + to.width/2 - 14}px`;
+        dot.style.top = `${to.top + to.height/2 - 14}px`;
+        dot.style.transform = 'scale(1)';
+    }, 40);
+
+    setTimeout(() => {
+        dot.style.transition = 'opacity 0.15s';
+        dot.style.opacity = '0';
+        if (cb) cb();
+    }, 540);
+}
+
+// За замовчуванням: рядок "Kyiv"
+let currentData = stringToBytes("Kyiv");
+
+function getFrames(d) {
+    const activeBytes = d.chars.map((_, i) => `byte-${i}`);
+    const byteRangeText = `#00..${(d.totalBytes * 8 - 1).toString().padStart(2, '0')}`;
+
+    return [
+        {
+            tok: null, conductor: false, hand: '(порожньо)',
+            ledger: [], slice: null, lamps: [],
+            showTable: false,
+            cue: `Готово. Демонстрація збереження текстового рядка "${d.text}" у пам'яті.`
+        },
+        // 1: Оголошення s
+        {
+            tok: 'tok-s', conductor: true, hand: '(порожньо)',
+            ledger: [], slice: null, lamps: [],
+            showTable: false,
+            cue: "Інтерпретатор зустрічає оголошення рядкової змінної 's'."
+        },
+        // 2: Виділення ламп під кожен символ
+        {
+            tok: 'tok-s', conductor: true, hand: '(порожньо)',
+            ledger: [{v:'s', r: byteRangeText, sz:`${d.totalBytes} байти (${d.totalBytes * 8} біт)`, val:'?'}],
+            slice: activeBytes, lamps: [],
+            showTable: false,
+            cue: `Оскільки в рядку ${d.totalBytes} симв., виділяється ${d.totalBytes} байти підряд (${d.totalBytes * 8} настільних ламп)!`
+        },
+        // 3: Фокус на рядковому літералі
+        {
+            tok: 'tok-val', conductor: true, hand: '(порожньо)',
+            ledger: [{v:'s', r: byteRangeText, sz:`${d.totalBytes} байти (${d.totalBytes * 8} біт)`, val:'?'}],
+            slice: null, lamps: [],
+            showTable: false,
+            cue: `Вказівник переходить до рядкового літерала "${d.text}" у коді файлу.`
+        },
+        // 4: Кодування через таблицю ASCII
+        {
+            tok: 'tok-val', conductor: true, hand: `"${d.text}"`,
+            fly: {from: 'tok-val', to: 'conductor-hand', val: `"${d.text}"`},
+            ledger: [{v:'s', r: byteRangeText, sz:`${d.totalBytes} байти (${d.totalBytes * 8} біт)`, val:'?'}],
+            slice: null, lamps: [],
+            showTable: true,
+            cue: `Інтерпретатор бере літери й перетворює кожну на число за таблицею ASCII/Unicode: ${d.chars.map(c => `'${c.charSymbol}'→${c.code}`).join(', ')}.`
+        },
+        // 5: Відправка байтів шиною
+        {
+            tok: 'tok-val', conductor: true, hand: '(порожньо)',
+            fly: {from: 'conductor-box', to: 'byte-1', val: `${d.totalBytes}B`},
+            ledger: [{v:'s', r: byteRangeText, sz:`${d.totalBytes} байти (${d.totalBytes * 8} біт)`, val:'?'}],
+            slice: activeBytes, lamps: [],
+            showTable: true,
+            cue: "Потоки електричних сигналів шиною летять до відповідних рядків ламп."
+        },
+        // 6: Лампи вмикаються — кожен рядок кодує символ
+        {
+            tok: null, conductor: false, hand: '(спокій)',
+            ledger: [{v:'s', r: byteRangeText, sz:`${d.totalBytes} байти (${d.totalBytes * 8} біт)`, val: `"${d.text}"`}],
+            slice: null, lamps: d.litIndices,
+            showTable: true,
+            cue: `Лампи клацнули! Кожен рядок ламп тепер надійно зберігає двійковий код своєї літери.`
+        }
+    ];
+}
+
+let frames = getFrames(currentData);
+let curIdx = 0;
+
+function updateStaticElements(d) {
+    // 1. Оновлення коду
+    document.getElementById('tok-val').textContent = `"${d.text}"`;
+
+    // 2. Оновлення таблиці кодування в колонці 2
+    const tbody = document.getElementById('char-table-body');
+    tbody.innerHTML = d.chars.map((c, i) => `
+        <tr>
+            <td>Байт ${c.byteIdx}</td>
+            <td><span class="char-badge" style="background: ${CHAR_COLORS[i]};">'${c.charSymbol}'</span></td>
+            <td>${c.code}</td>
+            <td>${c.hexStr}</td>
+            <td style="font-weight: bold; color: var(--conductor);">${c.binStr}</td>
+        </tr>
+    `).join('');
+
+    // 3. Оновлення легенди в колонці 3
+    const legend = document.getElementById('legend-bar');
+    legend.innerHTML = d.chars.map((c, i) => `
+        <div class="legend-item">
+            <div class="legend-dot" style="background: ${CHAR_COLORS[i]};"></div>
+            <span>Байт ${c.byteIdx}: '${c.charSymbol}' (${c.code})</span>
+        </div>
+    `).join('');
+
+    // 4. Оновлення підписів біля ламп
+    for (let i = 0; i < 4; i++) {
+        const lbl = document.getElementById(`label-b${i}`);
+        if (i < d.totalBytes) {
+            lbl.textContent = `Байт ${i} ['${d.chars[i].charSymbol}']`;
+            lbl.style.color = CHAR_COLORS[i];
+        } else {
+            lbl.textContent = `Байт ${i} [вільний]`;
+            lbl.style.color = 'var(--muted)';
+        }
+    }
+}
+
+function renderFrame(idx) {
+    const f = frames[idx];
+
+    // 1. Токен коду
+    document.querySelectorAll('.tok').forEach(el => el.classList.remove('pc-focus'));
+    if (f.tok) {
+        const el = document.getElementById(f.tok);
+        if (el) el.classList.add('pc-focus');
+    }
+
+    // 2. Інтерпретатор
+    const cbox = document.getElementById('conductor-box');
+    if (f.conductor) cbox.classList.add('active');
+    else cbox.classList.remove('active');
+    document.getElementById('conductor-hand').textContent = `Утримує: ${f.hand}`;
+
+    // 3. Таблиця кодування символів
+    const charTable = document.getElementById('char-table-body');
+    charTable.style.opacity = f.showTable ? '1' : '0.25';
+
+    // 4. Карта пам'яті
+    const ledgerTbody = document.getElementById('ledger-body');
+    if (!f.ledger || f.ledger.length === 0) {
+        ledgerTbody.innerHTML = '<tr id="ledger-none"><td colspan="4" style="text-align: center; color: var(--muted);">- Порожньо -</td></tr>';
+    } else {
+        ledgerTbody.innerHTML = f.ledger.map(row => `
+            <tr class="ledger-row active">
+                <td><strong>${row.v}</strong></td>
+                <td>${row.r}</td>
+                <td>${row.sz}</td>
+                <td>${row.val}</td>
+            </tr>
+        `).join('');
+    }
+
+    // 5. Підсвітка активних байтів
+    document.querySelectorAll('.byte-row').forEach(el => el.classList.remove('slice-focus'));
+    if (f.slice) {
+        f.slice.forEach(bId => {
+            const el = document.getElementById(bId);
+            if (el) el.classList.add('slice-focus');
+        });
+    }
+
+    // 6. Лампи
+    for (let i = 0; i < 32; i++) {
+        const el = document.getElementById(`lunit-${i}`);
+        if (el) {
+            if (f.lamps.includes(i)) el.classList.add('lit');
+            else el.classList.remove('lit');
+        }
+    }
+
+    // 7. Підказка
+    document.getElementById('cue').textContent = f.cue;
+    document.getElementById('step-counter').textContent = `Крок ${idx} / ${frames.length - 1}`;
+    document.getElementById('next-btn').disabled = (idx >= frames.length - 1);
+
+    // 8. Політ
+    if (f.fly) {
+        fly(f.fly.from, f.fly.to, f.fly.val);
+    }
+}
+
+function stepForward() {
+    if (curIdx < frames.length - 1) {
+        curIdx++;
+        renderFrame(curIdx);
+    }
+}
+
+function stepBackward() {
+    if (curIdx > 0) {
+        curIdx--;
+        renderFrame(curIdx);
+    }
+}
+
+function resetFrames() {
+    curIdx = 0;
+    renderFrame(0);
+}
+
+function applyCustomString() {
+    const rawVal = document.getElementById('custom-val').value;
+    if (!rawVal || rawVal.length === 0) return;
+
+    currentData = stringToBytes(rawVal);
+    updateStaticElements(currentData);
+    frames = getFrames(currentData);
+    curIdx = 6; // Одразу показуємо результат увімкнених ламп
+    renderFrame(6);
+}
+
+function setPreset(str) {
+    document.getElementById('custom-val').value = str;
+    applyCustomString();
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault();
+        stepForward();
+    } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        stepBackward();
+    }
+});
+
+updateStaticElements(currentData);
+renderFrame(0);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Повний інтерактивний потік виконання інструкцій у Python</title>
+<style>
+  :root {
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #c7d2fe;       /* м'який індиго замість сірого */
+    --code-bg: #ffffff;
+    --text: #0f172a;
+    --muted: #4338ca;        /* насичений індиго */
+
+    /* ПАЛІТРА ПАСИВНИХ СТРІЛОК (жодного сірого) */
+    --arr-idle-seq:  #38bdf8; /* небесно-блакитний */
+    --arr-idle-exec: #4ade80; /* смарагдовий */
+    --arr-idle-skip: #f87171; /* коралово-червоний */
+    --arr-idle-loop: #fbbf24; /* теплий бурштиновий */
+
+    /* ЄДИНИЙ СТИЛЬ СЯЙВА ДЛЯ АКТИВНОГО ТОКЕНА ТА АКТИВНОЇ СТРІЛКИ */
+    --active-glow-bg:     #fef08a;
+    --active-glow-border: #ca8a04;
+    --active-glow-stroke: #eab308;
+    --active-glow-shadow: rgba(234, 179, 8, 0.75);
+
+    /* СИНТАКСИС КОДУ */
+    --syn-kw:   #581c87;     /* глибокий фіолетовий: if, else, while */
+    --syn-str:  #831843;     /* винно-бордовий: рядки */
+    --syn-text: #0f172a;     /* чорно-вугільний */
+    --syn-num:  #4f46e5;     /* індиго для номерів рядків */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  header {
+    text-align: center;
+    max-width: 960px;
+  }
+  h1 { font-size: 1.65rem; color: #1e1b4b; margin-bottom: 6px; }
+  header p { color: var(--muted); font-size: 0.95rem; line-height: 1.5; font-weight: 500; }
+
+  /* Панель навігації */
+  .control-panel {
+    width: 100%;
+    max-width: 1040px;
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.08);
+  }
+
+  .btn-group { display: flex; align-items: center; gap: 8px; }
+
+  button.nav-btn {
+    background: #4338ca;
+    color: #fff;
+    border: none;
+    padding: 9px 22px;
+    border-radius: 7px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(67, 56, 202, 0.25);
+    transition: background 0.15s, transform 0.05s;
+  }
+  button.nav-btn:hover:not(:disabled) { background: #3730a3; }
+  button.nav-btn:active:not(:disabled) { transform: scale(0.98); }
+  button.nav-btn:disabled { background: #e0e7ff; color: #a5b4fc; cursor: not-allowed; box-shadow: none; }
+
+  button.sec-btn {
+    background: #eef2ff;
+    color: #3730a3;
+    border: 1px solid var(--border);
+    padding: 9px 15px;
+    border-radius: 7px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.sec-btn:hover { background: #e0e7ff; }
+
+  .scenario-selector {
+    display: flex;
+    gap: 6px;
+    background: #eef2ff;
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .scen-btn {
+    background: transparent;
+    border: none;
+    color: #4338ca;
+    padding: 7px 13px;
+    font-size: 0.84rem;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .scen-btn.active {
+    background: #ffffff;
+    color: #1e1b4b;
+    font-weight: 700;
+    box-shadow: 0 2px 5px rgba(67, 56, 202, 0.15);
+  }
+
+  .step-counter {
+    font-size: 0.88rem;
+    font-weight: 800;
+    color: var(--muted);
+    min-width: 95px;
+    text-align: center;
+  }
+
+  /* Смужка поточної інструкції */
+  .cue-box {
+    width: 100%;
+    max-width: 1040px;
+    background: #ffffff;
+    border: 1.5px solid var(--border);
+    border-left: 6px solid #4338ca;
+    border-radius: 9px;
+    padding: 13px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.05);
+  }
+  .cue-text { font-size: 0.96rem; font-weight: 600; color: #1e1b4b; line-height: 1.45; }
+  .op-badge {
+    background: #eef2ff;
+    border: 1px solid var(--border);
+    color: #3730a3;
+    font-family: ui-monospace, monospace;
+    font-size: 0.8rem;
+    font-weight: 800;
+    padding: 5px 10px;
+    border-radius: 5px;
+    white-space: nowrap;
+  }
+
+  /* Робоча сцена */
+  .stage-card {
+    width: 100%;
+    max-width: 1040px;
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 30px;
+    position: relative;
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.06);
+  }
+
+  .code-container {
+    position: relative;
+    width: 100%;
+  }
+
+  /* SVG зі стрілками */
+  .arrow-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 5;
+  }
+
+  /* Пасивні стрілки (не сірі) */
+  path.arrow-path {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: none;
+    transition: stroke 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease;
+  }
+  path.arr-type-seq  { stroke: var(--arr-idle-seq); }
+  path.arr-type-exec { stroke: var(--arr-idle-exec); }
+  path.arr-type-skip { stroke: var(--arr-idle-skip); }
+  path.arr-type-loop { stroke: var(--arr-idle-loop); }
+
+  /* АКТИВНА СТРІЛКА (золотаве сяйво) */
+  path.arrow-path.active-arrow {
+    stroke: var(--active-glow-stroke) !important;
+    stroke-width: 4.8 !important;
+    filter: drop-shadow(0 0 8px var(--active-glow-shadow)) !important;
+  }
+
+  /* Рядки коду */
+  .code-line {
+    height: 42px;
+    display: flex;
+    align-items: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 15px;
+    color: var(--syn-text);
+    position: relative;
+    z-index: 10;
+    transition: opacity 0.25s ease;
+  }
+
+  /* Збільшений відступ (90px) */
+  .code-line.indented {
+    padding-left: 90px;
+  }
+  .indent-guide {
+    position: absolute;
+    left: 110px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e0e7ff;
+  }
+
+  .linenum {
+    width: 32px;
+    color: var(--syn-num);
+    user-select: none;
+    font-size: 13px;
+    text-align: right;
+    margin-right: 20px;
+    font-weight: 700;
+  }
+
+  .code-text-content {
+    display: inline-flex;
+    align-items: center;
+    white-space: pre;
+  }
+
+  /* Токени */
+  .tok {
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    display: inline-block;
+    transition: all 0.18s ease;
+  }
+  .tok.kw { color: var(--syn-kw); font-weight: bold; }
+  .tok.str { color: var(--syn-str); }
+
+  /* ПІДСВІЧЕНИЙ ТОКЕН */
+  .tok.pc-focus {
+    background: var(--active-glow-bg) !important;
+    border-color: var(--active-glow-border) !important;
+    box-shadow: 0 0 10px var(--active-glow-shadow);
+    font-weight: 800;
+    transform: scale(1.1);
+  }
+
+  /* Пропущені рядки */
+  .code-line.skipped {
+    opacity: 0.28;
+    text-decoration: line-through;
+    text-decoration-color: #dc2626;
+  }
+  .skip-badge {
+    margin-left: 18px;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #dc2626;
+    font-size: 11px;
+    font-weight: 800;
+    font-family: system-ui, sans-serif;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-decoration: none !important;
+    display: none;
+  }
+  .code-line.skipped .skip-badge { display: inline-block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Фактичний порядок виконання інструкцій у Python</h1>
+  <p>
+    Один рядок — це кілька окремих інструкцій. Стрілки починаються <b>на кінці коду джерела</b> та завершуються <b>на межах тексту призначення</b>.
+    При переході стрілка спалахує тим самим золотавим сяйвом, що й активний токен коду.
+  </p>
+</header>
+
+<div class="control-panel">
+  <div class="btn-group">
+    <button class="sec-btn" onclick="stepBackward()">&lt; Назад</button>
+    <button id="next-btn" class="nav-btn" onclick="stepForward()">Наступний крок &gt;</button>
+    <button class="sec-btn" onclick="resetFrames()">Скинути</button>
+    <span id="step-counter" class="step-counter">Крок 0 / 0</span>
+  </div>
+
+  <div class="scenario-selector">
+    <button id="btn-scen-linear" class="scen-btn active" onclick="switchScenario('linear')">1. Лінійна програма</button>
+    <button id="btn-scen-if-true" class="scen-btn" onclick="switchScenario('if-true')">2. if / else (TRUE)</button>
+    <button id="btn-scen-if-false" class="scen-btn" onclick="switchScenario('if-false')">3. if / else (FALSE)</button>
+    <button id="btn-scen-while" class="scen-btn" onclick="switchScenario('while')">4. Цикл while</button>
+  </div>
+</div>
+
+<div class="cue-box">
+  <div id="cue-text" class="cue-text">Готово. Натисніть «Наступний крок &gt;».</div>
+  <div id="op-badge" class="op-badge">ГОТОВО</div>
+</div>
+
+<div class="stage-card">
+  <div id="code-container" class="code-container">
+    <svg id="arrow-svg" class="arrow-overlay">
+      <defs>
+        <!-- Пасивні наконечники (без сірого) -->
+        <marker id="m-idle-seq" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#38bdf8" />
+        </marker>
+        <marker id="m-idle-exec" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#4ade80" />
+        </marker>
+        <marker id="m-idle-skip" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f87171" />
+        </marker>
+        <marker id="m-idle-loop" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#fbbf24" />
+        </marker>
+
+        <!-- АКТИВНИЙ НАКОНЕЧНИК СТРІЛКИ -->
+        <marker id="m-active" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#ca8a04" />
+        </marker>
+      </defs>
+    </svg>
+
+    <div id="code-lines"></div>
+  </div>
+</div>
+
+<script>
+const SCENARIOS = {
+  // -------------------------------------------------------------
+  // СЦЕНАРІЙ 1: ЛІНІЙНА ПРОГРАМА (7 РЯДКІВ)
+  // -------------------------------------------------------------
+  'linear': {
+    html: `
+      <div id="line-1" class="code-line"><span class="linenum">1</span><span class="code-text-content"><span id="tok-lin-a1" class="tok">a</span> = <span id="tok-lin-10" class="tok">10</span></span></div>
+      <div id="line-2" class="code-line"><span class="linenum">2</span><span class="code-text-content"><span id="tok-lin-b2" class="tok">b</span> = <span id="tok-lin-25" class="tok">25</span></span></div>
+      <div id="line-3" class="code-line"><span class="linenum">3</span><span class="code-text-content"><span id="tok-lin-p3" class="tok">print</span>(<span id="tok-lin-s3" class="tok str">"Початок обчислення..."</span>)</span></div>
+      <div id="line-4" class="code-line"><span class="linenum">4</span><span class="code-text-content"><span id="tok-lin-sum4" class="tok">sum_val</span> = <span id="tok-lin-a4" class="tok">a</span> <span id="tok-lin-add4" class="tok">+</span> <span id="tok-lin-b4" class="tok">b</span></span></div>
+      <div id="line-5" class="code-line"><span class="linenum">5</span><span class="code-text-content"><span id="tok-lin-res5" class="tok">result</span> = <span id="tok-lin-sum5" class="tok">sum_val</span> <span id="tok-lin-mul5" class="tok">*</span> <span id="tok-lin-2" class="tok">2</span></span></div>
+      <div id="line-6" class="code-line"><span class="linenum">6</span><span class="code-text-content"><span id="tok-lin-p6" class="tok">print</span>(<span id="tok-lin-s6" class="tok str">"Остаточний результат:"</span>)</span></div>
+      <div id="line-7" class="code-line"><span class="linenum">7</span><span class="code-text-content"><span id="tok-lin-p7" class="tok">print</span>(<span id="tok-lin-res7" class="tok">result</span>)</span></div>
+    `,
+    arrows: [
+      { id: 'arr-lin-1-to-2', type: 'seq', from: 1, to: 2, curve: 'seq-down' },
+      { id: 'arr-lin-2-to-3', type: 'seq', from: 2, to: 3, curve: 'seq-down' },
+      { id: 'arr-lin-3-to-4', type: 'seq', from: 3, to: 4, curve: 'seq-down' },
+      { id: 'arr-lin-4-to-5', type: 'seq', from: 4, to: 5, curve: 'seq-down' },
+      { id: 'arr-lin-5-to-6', type: 'seq', from: 5, to: 6, curve: 'seq-down' },
+      { id: 'arr-lin-6-to-7', type: 'seq', from: 6, to: 7, curve: 'seq-down' }
+    ],
+    frames: [
+      { tok: null, arrow: null, skipped: [], op: "ПОЧАТОК", cue: "Початковий стан. Усі 7 рядків виконаються строго послідовно зверху вниз." },
+
+      // Рядок 1: a = 10
+      { tok: 'tok-lin-10', arrow: null, skipped: [], op: "LOAD_CONST (10)", cue: "Рядок 1 [Команда 1]: Процесор завантажує число 10 із коду програми в стек." },
+      { tok: 'tok-lin-a1', arrow: null, skipped: [], op: "STORE_NAME (a)", cue: "Рядок 1 [Команда 2]: Число 10 записується в комірку змінної 'a'." },
+      { tok: null, arrow: 'arr-lin-1-to-2', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Рядок 1 завершено, стрілка веде від його кінця до рядка 2." },
+
+      // Рядок 2: b = 25
+      { tok: 'tok-lin-25', arrow: null, skipped: [], op: "LOAD_CONST (25)", cue: "Рядок 2 [Команда 1]: Завантажуємо число 25." },
+      { tok: 'tok-lin-b2', arrow: null, skipped: [], op: "STORE_NAME (b)", cue: "Рядок 2 [Команда 2]: Число 25 записується в змінну 'b'." },
+      { tok: null, arrow: 'arr-lin-2-to-3', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Послідовний перехід від кінця рядка 2 до рядка 3." },
+
+      // Рядок 3: print("Початок обчислення...")
+      { tok: 'tok-lin-p3', arrow: null, skipped: [], op: "LOAD_NAME (print)", cue: "Рядок 3 [Команда 1]: Спершу завантажується посилання на функцію print." },
+      { tok: 'tok-lin-s3', arrow: null, skipped: [], op: "LOAD_CONST (текст)", cue: "Рядок 3 [Команда 2]: Завантажується аргумент повідомлення." },
+      { tok: 'tok-lin-p3', arrow: null, skipped: [], op: "CALL_FUNCTION", cue: "Рядок 3 [Команда 3]: Виклик функції print(). Повідомлення виведено." },
+      { tok: null, arrow: 'arr-lin-3-to-4', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Перехід від рядка 3 до обчислень на рядку 4." },
+
+      // Рядок 4: sum_val = a + b
+      { tok: 'tok-lin-a4', arrow: null, skipped: [], op: "LOAD_NAME (a)", cue: "Рядок 4 [Команда 1]: Зчитуємо з пам'яті змінну a (вона дорівнює 10)." },
+      { tok: 'tok-lin-b4', arrow: null, skipped: [], op: "LOAD_NAME (b)", cue: "Рядок 4 [Команда 2]: Зчитуємо змінну b (вона дорівнює 25)." },
+      { tok: 'tok-lin-add4', arrow: null, skipped: [], op: "BINARY_ADD (+)", cue: "Рядок 4 [Команда 3]: АЛП виконує операцію додавання: 10 + 25 = 35." },
+      { tok: 'tok-lin-sum4', arrow: null, skipped: [], op: "STORE_NAME (sum_val)", cue: "Рядок 4 [Команда 4]: Результат 35 записується в нову змінну 'sum_val'." },
+      { tok: null, arrow: 'arr-lin-4-to-5', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Рядок 4 виконано, переходимо до рядка 5." },
+
+      // Рядок 5: result = sum_val * 2
+      { tok: 'tok-lin-sum5', arrow: null, skipped: [], op: "LOAD_NAME (sum_val)", cue: "Рядок 5 [Команда 1]: Зчитуємо значення sum_val (35)." },
+      { tok: 'tok-lin-2', arrow: null, skipped: [], op: "LOAD_CONST (2)", cue: "Рядок 5 [Команда 2]: Завантажуємо множник 2." },
+      { tok: 'tok-lin-mul5', arrow: null, skipped: [], op: "BINARY_MULTIPLY (*)", cue: "Рядок 5 [Команда 3]: Множення: 35 * 2 = 70." },
+      { tok: 'tok-lin-res5', arrow: null, skipped: [], op: "STORE_NAME (result)", cue: "Рядок 5 [Команда 4]: Результат 70 записується в змінну 'result'." },
+      { tok: null, arrow: 'arr-lin-5-to-6', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Перехід від кінця рядка 5 до рядка 6." },
+
+      // Рядок 6: print("Остаточний результат:")
+      { tok: 'tok-lin-p6', arrow: null, skipped: [], op: "LOAD_NAME (print)", cue: "Рядок 6 [Команда 1]: Завантажуємо функцію print." },
+      { tok: 'tok-lin-s6', arrow: null, skipped: [], op: "LOAD_CONST (текст)", cue: "Рядок 6 [Команда 2]: Завантажуємо заголовок результату." },
+      { tok: 'tok-lin-p6', arrow: null, skipped: [], op: "CALL_FUNCTION", cue: "Рядок 6 [Команда 3]: Виклик print()." },
+      { tok: null, arrow: 'arr-lin-6-to-7', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Перехід до фінального рядка 7." },
+
+      // Рядок 7: print(result)
+      { tok: 'tok-lin-p7', arrow: null, skipped: [], op: "LOAD_NAME (print)", cue: "Рядок 7 [Команда 1]: Завантажуємо функцію print." },
+      { tok: 'tok-lin-res7', arrow: null, skipped: [], op: "LOAD_NAME (result)", cue: "Рядок 7 [Команда 2]: Зчитуємо значення result (70)." },
+      { tok: 'tok-lin-p7', arrow: null, skipped: [], op: "CALL_FUNCTION", cue: "Рядок 7 [Команда 3]: Виклик print(). Надруковано 70. Лінійний алгоритм завершено!" }
+    ]
+  },
+
+  // -------------------------------------------------------------
+  // СЦЕНАРІЙ 2: IF / ELSE — TRUE (9 РЯДКІВ)
+  // -------------------------------------------------------------
+  'if-true': {
+    html: `
+      <div id="line-1" class="code-line"><span class="linenum">1</span><span class="code-text-content"><span id="tok-temp-1" class="tok">temp</span> = <span id="tok-28-1" class="tok">28</span></span></div>
+      <div id="line-2" class="code-line"><span class="linenum">2</span><span class="code-text-content"><span id="tok-print-2" class="tok">print</span>(<span id="tok-str-2" class="tok str">"Перевірка погоди..."</span>)</span></div>
+      <div id="line-3" class="code-line"><span class="linenum">3</span><span class="code-text-content"><span id="tok-if-3" class="tok kw">if</span> <span id="tok-temp-3" class="tok">temp</span> <span id="tok-gt-3" class="tok">&gt;</span> <span id="tok-25-3" class="tok">25</span>:</span></div>
+      <div class="indent-guide" style="top: 126px; height: 84px;"></div>
+      <div id="line-4" class="code-line indented"><span class="linenum">4</span><span class="code-text-content"><span id="tok-print-4" class="tok">print</span>(<span id="tok-str-4" class="tok str">"На вулиці спекотно!"</span>)</span></div>
+      <div id="line-5" class="code-line indented"><span class="linenum">5</span><span class="code-text-content"><span id="tok-cloth-5" class="tok">clothing</span> = <span id="tok-str-5" class="tok str">"Футболка"</span></span></div>
+      <div id="line-6" class="code-line"><span class="linenum">6</span><span class="code-text-content"><span id="tok-else-6" class="tok kw">else:</span></span><span class="skip-badge">ОМИНАЄТЬСЯ (НЕ ВИКОНУЄТЬСЯ)</span></div>
+      <div class="indent-guide" style="top: 252px; height: 84px;"></div>
+      <div id="line-7" class="code-line indented"><span class="linenum">7</span><span class="code-text-content"><span id="tok-print-7" class="tok">print</span>(<span id="tok-str-7" class="tok str">"На вулиці прохолодно."</span>)</span><span class="skip-badge">ОМИНАЄТЬСЯ (НЕ ВИКОНУЄТЬСЯ)</span></div>
+      <div id="line-8" class="code-line indented"><span class="linenum">8</span><span class="code-text-content"><span id="tok-cloth-8" class="tok">clothing</span> = <span id="tok-str-8" class="tok str">"Куртка"</span></span><span class="skip-badge">ОМИНАЄТЬСЯ (НЕ ВИКОНУЄТЬСЯ)</span></div>
+      <div id="line-9" class="code-line"><span class="linenum">9</span><span class="code-text-content"><span id="tok-print-9" class="tok">print</span>(<span id="tok-cloth-9" class="tok">clothing</span>)</span></div>
+    `,
+    arrows: [
+      { id: 'arr-1-to-2', type: 'seq', from: 1, to: 2, curve: 'seq-down' },
+      { id: 'arr-2-to-3', type: 'seq', from: 2, to: 3, curve: 'seq-down' },
+      { id: 'arr-3-to-4', type: 'exec', from: 3, to: 4, curve: 'into-block' },
+      { id: 'arr-4-to-5', type: 'exec', from: 4, to: 5, curve: 'seq-down' },
+      { id: 'arr-5-to-9', type: 'exec', from: 5, to: 9, curve: 'wide-jump' }
+    ],
+    frames: [
+      { tok: null, arrow: null, skipped: [], op: "ПОЧАТОК", cue: "Початковий стан. Змінній temp буде присвоєно 28. Натисніть «Наступний крок &gt;»." },
+
+      // Рядок 1: temp = 28
+      { tok: 'tok-28-1', arrow: null, skipped: [], op: "LOAD_CONST (28)", cue: "Рядок 1 [Команда 1]: Процесор завантажує число 28 із коду в робочий стек." },
+      { tok: 'tok-temp-1', arrow: null, skipped: [], op: "STORE_NAME (temp)", cue: "Рядок 1 [Команда 2]: Число 28 записується в комірку змінної 'temp'." },
+      { tok: null, arrow: 'arr-1-to-2', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Керування переходить від кінця рядка 1 до рядка 2." },
+
+      // Рядок 2: print("Перевірка погоди...")
+      { tok: 'tok-print-2', arrow: null, skipped: [], op: "LOAD_NAME (print)", cue: "Рядок 2 [Команда 1]: Завантажується посилання на функцію print." },
+      { tok: 'tok-str-2', arrow: null, skipped: [], op: "LOAD_CONST (текст)", cue: "Рядок 2 [Команда 2]: Завантажується текстовий рядок аргументу." },
+      { tok: 'tok-print-2', arrow: null, skipped: [], op: "CALL_FUNCTION", cue: "Рядок 2 [Команда 3]: Виклик print(). Текст виведено." },
+      { tok: null, arrow: 'arr-2-to-3', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Переходимо до перевірки умови на рядку 3." },
+
+      // Рядок 3: if temp > 25:
+      { tok: 'tok-temp-3', arrow: null, skipped: [], op: "LOAD_NAME (temp)", cue: "Рядок 3 [Команда 1]: З пам'яті зчитується temp (28)." },
+      { tok: 'tok-25-3', arrow: null, skipped: [], op: "LOAD_CONST (25)", cue: "Рядок 3 [Команда 2]: Завантажується число 25 для порівняння." },
+      { tok: 'tok-gt-3', arrow: null, skipped: [], op: "COMPARE_OP (>)", cue: "Рядок 3 [Команда 3]: Порівняння: 28 > 25. Результат: TRUE (Істина)!" },
+      { tok: 'tok-if-3', arrow: null, skipped: [], op: "POP_JUMP_IF_FALSE", cue: "Рядок 3 [Команда 4]: 'if' фіксує істину. Гілка else буде пропущена." },
+      { tok: null, arrow: 'arr-3-to-4', skipped: ['line-6', 'line-7', 'line-8'], op: "BRANCH_TRUE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Стрілка з кінця умови входить у межу рядка 4 (тіло if). Рядки 6–8 позначено як оминуті!" },
+
+      // Рядок 4: print("На вулиці спекотно!")
+      { tok: 'tok-print-4', arrow: null, skipped: ['line-6', 'line-7', 'line-8'], op: "LOAD_NAME (print)", cue: "Рядок 4 [Команда 1]: Завантажуємо функцію print." },
+      { tok: 'tok-str-4', arrow: null, skipped: ['line-6', 'line-7', 'line-8'], op: "LOAD_CONST (текст)", cue: "Рядок 4 [Команда 2]: Завантажуємо текст повідомлення." },
+      { tok: 'tok-print-4', arrow: null, skipped: ['line-6', 'line-7', 'line-8'], op: "CALL_FUNCTION", cue: "Рядок 4 [Команда 3]: Виклик print()." },
+      { tok: null, arrow: 'arr-4-to-5', skipped: ['line-6', 'line-7', 'line-8'], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Перехід до наступної інструкції блоку if (рядок 5)." },
+
+      // Рядок 5: clothing = "Футболка"
+      { tok: 'tok-str-5', arrow: null, skipped: ['line-6', 'line-7', 'line-8'], op: "LOAD_CONST (\"Футболка\")", cue: "Рядок 5 [Команда 1]: Завантажуємо значення \"Футболка\"." },
+      { tok: 'tok-cloth-5', arrow: null, skipped: ['line-6', 'line-7', 'line-8'], op: "STORE_NAME (clothing)", cue: "Рядок 5 [Команда 2]: Змінній clothing присвоєно \"Футболка\"." },
+
+      // СТРІБОК ЧЕРЕЗ ELSE (5 -> 9)
+      { tok: null, arrow: 'arr-5-to-9', skipped: ['line-6', 'line-7', 'line-8'], op: "JUMP_FORWARD (ELSE_SKIP)", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: СТРИБОК ЧЕРЕЗ БЛОК ELSE! Від кінця рядка 5 стрілка перелітає рядки 6, 7, 8 і приземляється точно на межу рядка 9!" },
+
+      // Рядок 9: print(clothing)
+      { tok: 'tok-print-9', arrow: null, skipped: ['line-6', 'line-7', 'line-8'], op: "LOAD_NAME (print)", cue: "Рядок 9 [Команда 1]: Завантажуємо print." },
+      { tok: 'tok-cloth-9', arrow: null, skipped: ['line-6', 'line-7', 'line-8'], op: "LOAD_NAME (clothing)", cue: "Рядок 9 [Команда 2]: Зчитуємо clothing (\"Футболка\")." },
+      { tok: 'tok-print-9', arrow: null, skipped: ['line-6', 'line-7', 'line-8'], op: "CALL_FUNCTION", cue: "Рядок 9 [Команда 3]: Виклик print(). Надруковано: Футболка. Програму завершено!" }
+    ]
+  },
+
+  // -------------------------------------------------------------
+  // СЦЕНАРІЙ 3: IF / ELSE — FALSE (9 РЯДКІВ)
+  // -------------------------------------------------------------
+  'if-false': {
+    html: `
+      <div id="line-1" class="code-line"><span class="linenum">1</span><span class="code-text-content"><span id="tok-temp-1" class="tok">temp</span> = <span id="tok-18-1" class="tok">18</span></span></div>
+      <div id="line-2" class="code-line"><span class="linenum">2</span><span class="code-text-content"><span id="tok-print-2" class="tok">print</span>(<span id="tok-str-2" class="tok str">"Перевірка погоди..."</span>)</span></div>
+      <div id="line-3" class="code-line"><span class="linenum">3</span><span class="code-text-content"><span id="tok-if-3" class="tok kw">if</span> <span id="tok-temp-3" class="tok">temp</span> <span id="tok-gt-3" class="tok">&gt;</span> <span id="tok-25-3" class="tok">25</span>:</span></div>
+      <div class="indent-guide" style="top: 126px; height: 84px;"></div>
+      <div id="line-4" class="code-line indented"><span class="linenum">4</span><span class="code-text-content"><span id="tok-print-4" class="tok">print</span>(<span id="tok-str-4" class="tok str">"На вулиці спекотно!"</span>)</span><span class="skip-badge">ОМИНАЄТЬСЯ (НЕ ВИКОНУЄТЬСЯ)</span></div>
+      <div id="line-5" class="code-line indented"><span class="linenum">5</span><span class="code-text-content"><span id="tok-cloth-5" class="tok">clothing</span> = <span id="tok-str-5" class="tok str">"Футболка"</span></span><span class="skip-badge">ОМИНАЄТЬСЯ (НЕ ВИКОНУЄТЬСЯ)</span></div>
+      <div id="line-6" class="code-line"><span class="linenum">6</span><span class="code-text-content"><span id="tok-else-6" class="tok kw">else:</span></span></div>
+      <div class="indent-guide" style="top: 252px; height: 84px;"></div>
+      <div id="line-7" class="code-line indented"><span class="linenum">7</span><span class="code-text-content"><span id="tok-print-7" class="tok">print</span>(<span id="tok-str-7" class="tok str">"На вулиці прохолодно."</span>)</span></div>
+      <div id="line-8" class="code-line indented"><span class="linenum">8</span><span class="code-text-content"><span id="tok-cloth-8" class="tok">clothing</span> = <span id="tok-str-8" class="tok str">"Куртка"</span></span></div>
+      <div id="line-9" class="code-line"><span class="linenum">9</span><span class="code-text-content"><span id="tok-print-9" class="tok">print</span>(<span id="tok-cloth-9" class="tok">clothing</span>)</span></div>
+    `,
+    arrows: [
+      { id: 'arr-1-to-2', type: 'seq', from: 1, to: 2, curve: 'seq-down' },
+      { id: 'arr-2-to-3', type: 'seq', from: 2, to: 3, curve: 'seq-down' },
+      { id: 'arr-3-to-6', type: 'skip', from: 3, to: 6, curve: 'wide-jump' },
+      { id: 'arr-6-to-7', type: 'exec', from: 6, to: 7, curve: 'into-block' },
+      { id: 'arr-7-to-8', type: 'exec', from: 7, to: 8, curve: 'seq-down' },
+      { id: 'arr-8-to-9', type: 'seq', from: 8, to: 9, curve: 'seq-down' }
+    ],
+    frames: [
+      { tok: null, arrow: null, skipped: [], op: "ПОЧАТОК", cue: "Початковий стан. Змінній temp присвоюється 18. Умова буде хибною." },
+
+      // Рядок 1: temp = 18
+      { tok: 'tok-18-1', arrow: null, skipped: [], op: "LOAD_CONST (18)", cue: "Рядок 1 [Команда 1]: Число 18 завантажується в стек." },
+      { tok: 'tok-temp-1', arrow: null, skipped: [], op: "STORE_NAME (temp)", cue: "Рядок 1 [Команда 2]: Змінній temp присвоєно значення 18." },
+      { tok: null, arrow: 'arr-1-to-2', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Перехід до рядка 2." },
+
+      // Рядок 2: print("Перевірка...")
+      { tok: 'tok-print-2', arrow: null, skipped: [], op: "LOAD_NAME (print)", cue: "Рядок 2 [Команда 1]: Завантажуємо функцію print." },
+      { tok: 'tok-str-2', arrow: null, skipped: [], op: "LOAD_CONST (текст)", cue: "Рядок 2 [Команда 2]: Завантажуємо текст повідомлення." },
+      { tok: 'tok-print-2', arrow: null, skipped: [], op: "CALL_FUNCTION", cue: "Рядок 2 [Команда 3]: Виклик print()." },
+      { tok: null, arrow: 'arr-2-to-3', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Перехід до умови if на рядку 3." },
+
+      // Рядок 3: if temp > 25: (ХИБА)
+      { tok: 'tok-temp-3', arrow: null, skipped: [], op: "LOAD_NAME (temp)", cue: "Рядок 3 [Команда 1]: Читаємо значення temp (воно дорівнює 18)." },
+      { tok: 'tok-25-3', arrow: null, skipped: [], op: "LOAD_CONST (25)", cue: "Рядок 3 [Команда 2]: Завантажуємо константу 25." },
+      { tok: 'tok-gt-3', arrow: null, skipped: [], op: "COMPARE_OP (>)", cue: "Рядок 3 [Команда 3]: Порівняння: 18 > 25. Результат: FALSE (Хиба)!" },
+      { tok: 'tok-if-3', arrow: null, skipped: [], op: "POP_JUMP_IF_FALSE", cue: "Рядок 3 [Команда 4]: Умова ХИБНА! Рядки 4 та 5 гілки if позначаються як оминуті." },
+
+      // СТРІЛКА СТРИБКА ПОВЗ IF НА ELSE (3 -> 6)
+      { tok: null, arrow: 'arr-3-to-6', skipped: ['line-4', 'line-5'], op: "JUMP_TO_ELSE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: ХИБА! Стрілка перелітає блок if (рядки 4 та 5) прямо до мітки else: на рядку 6!" },
+
+      // Рядок 6: else:
+      { tok: 'tok-else-6', arrow: null, skipped: ['line-4', 'line-5'], op: "ENTER_ELSE_BLOCK", cue: "Рядок 6 [Секція else]: Керування офіційно перейшло у гілку else." },
+      { tok: null, arrow: 'arr-6-to-7', skipped: ['line-4', 'line-5'], op: "ENTER_BLOCK_BODY", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Вхід у тіло блоку else (рядок 7)." },
+
+      // Рядок 7: print("На вулиці прохолодно.")
+      { tok: 'tok-print-7', arrow: null, skipped: ['line-4', 'line-5'], op: "LOAD_NAME (print)", cue: "Рядок 7 [Команда 1]: Завантажуємо print." },
+      { tok: 'tok-str-7', arrow: null, skipped: ['line-4', 'line-5'], op: "LOAD_CONST (текст)", cue: "Рядок 7 [Команда 2]: Завантажуємо текст блоку else." },
+      { tok: 'tok-print-7', arrow: null, skipped: ['line-4', 'line-5'], op: "CALL_FUNCTION", cue: "Рядок 7 [Команда 3]: Виклик print()." },
+      { tok: null, arrow: 'arr-7-to-8', skipped: ['line-4', 'line-5'], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Перехід від кінця рядка 7 до рядка 8." },
+
+      // Рядок 8: clothing = "Куртка"
+      { tok: 'tok-str-8', arrow: null, skipped: ['line-4', 'line-5'], op: "LOAD_CONST (\"Куртка\")", cue: "Рядок 8 [Команда 1]: Завантажуємо значення \"Куртка\"." },
+      { tok: 'tok-cloth-8', arrow: null, skipped: ['line-4', 'line-5'], op: "STORE_NAME (clothing)", cue: "Рядок 8 [Команда 2]: Змінній clothing присвоєно значення \"Куртка\"." },
+      { tok: null, arrow: 'arr-8-to-9', skipped: ['line-4', 'line-5'], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Блок else завершено, стрілка виходить на спільний рядок 9." },
+
+      // Рядок 9: print(clothing)
+      { tok: 'tok-print-9', arrow: null, skipped: ['line-4', 'line-5'], op: "LOAD_NAME (print)", cue: "Рядок 9 [Команда 1]: Завантажуємо print." },
+      { tok: 'tok-cloth-9', arrow: null, skipped: ['line-4', 'line-5'], op: "LOAD_NAME (clothing)", cue: "Рядок 9 [Команда 2]: Зчитуємо clothing (\"Куртка\")." },
+      { tok: 'tok-print-9', arrow: null, skipped: ['line-4', 'line-5'], op: "CALL_FUNCTION", cue: "Рядок 9 [Команда 3]: Виклик print(). Виведено: Куртка. Програму завершено!" }
+    ]
+  },
+
+  // -------------------------------------------------------------
+  // СЦЕНАРІЙ 4: WHILE (7 РЯДКІВ)
+  // -------------------------------------------------------------
+  'while': {
+    html: `
+      <div id="line-1" class="code-line"><span class="linenum">1</span><span class="code-text-content"><span id="tok-w-count-1" class="tok">count</span> = <span id="tok-w-2-1" class="tok">2</span></span></div>
+      <div id="line-2" class="code-line"><span class="linenum">2</span><span class="code-text-content"><span id="tok-w-print-2" class="tok">print</span>(<span id="tok-w-str-2" class="tok str">"Початок відліку:"</span>)</span></div>
+      <div id="line-3" class="code-line"><span class="linenum">3</span><span class="code-text-content"><span id="tok-w-while-3" class="tok kw">while</span> <span id="tok-w-count-3" class="tok">count</span> <span id="tok-w-gt-3" class="tok">&gt;</span> <span id="tok-w-0-3" class="tok">0</span>:</span></div>
+      <div class="indent-guide" style="top: 126px; height: 126px;"></div>
+      <div id="line-4" class="code-line indented"><span class="linenum">4</span><span class="code-text-content"><span id="tok-w-print-4" class="tok">print</span>(<span id="tok-w-str-4" class="tok str">"Крок:"</span>)</span><span class="skip-badge">ОМИНАЄТЬСЯ ПРИ ХИБНІЙ УМОВІ</span></div>
+      <div id="line-5" class="code-line indented"><span class="linenum">5</span><span class="code-text-content"><span id="tok-w-print-5" class="tok">print</span>(<span id="tok-w-count-5" class="tok">count</span>)</span><span class="skip-badge">ОМИНАЄТЬСЯ ПРИ ХИБНІЙ УМОВІ</span></div>
+      <div id="line-6" class="code-line indented"><span class="linenum">6</span><span class="code-text-content"><span id="tok-w-count-6-tgt" class="tok">count</span> = <span id="tok-w-count-6-src" class="tok">count</span> <span id="tok-w-sub-6" class="tok">-</span> <span id="tok-w-1-6" class="tok">1</span></span><span class="skip-badge">ОМИНАЄТЬСЯ ПРИ ХИБНІЙ УМОВІ</span></div>
+      <div id="line-7" class="code-line"><span class="linenum">7</span><span class="code-text-content"><span id="tok-w-print-7" class="tok">print</span>(<span id="tok-w-str-7" class="tok str">"Цикл завершено!"</span>)</span></div>
+    `,
+    arrows: [
+      { id: 'arr-w-1-to-2', type: 'seq', from: 1, to: 2, curve: 'seq-down' },
+      { id: 'arr-w-2-to-3', type: 'seq', from: 2, to: 3, curve: 'seq-down' },
+      { id: 'arr-w-3-to-4', type: 'exec', from: 3, to: 4, curve: 'into-block' },
+      { id: 'arr-w-4-to-5', type: 'exec', from: 4, to: 5, curve: 'seq-down' },
+      { id: 'arr-w-5-to-6', type: 'exec', from: 5, to: 6, curve: 'seq-down' },
+      { id: 'arr-w-6-to-3', type: 'loop', from: 6, to: 3, curve: 'loop-back' },
+      { id: 'arr-w-3-to-7', type: 'skip', from: 3, to: 7, curve: 'wide-jump' }
+    ],
+    frames: [
+      { tok: null, arrow: null, skipped: [], op: "ПОЧАТОК", cue: "Початковий стан. Лічильник count = 2. Цикл виконає дві повні ітерації." },
+
+      // Рядок 1: count = 2
+      { tok: 'tok-w-2-1', arrow: null, skipped: [], op: "LOAD_CONST (2)", cue: "Рядок 1 [Команда 1]: Завантажуємо початкове значення 2." },
+      { tok: 'tok-w-count-1', arrow: null, skipped: [], op: "STORE_NAME (count)", cue: "Рядок 1 [Команда 2]: count = 2." },
+      { tok: null, arrow: 'arr-w-1-to-2', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Переходимо до рядка 2." },
+
+      // Рядок 2: print("Початок відліку:")
+      { tok: 'tok-w-print-2', arrow: null, skipped: [], op: "LOAD_NAME (print)", cue: "Рядок 2 [Команда 1]: Завантажуємо функцію print." },
+      { tok: 'tok-w-str-2', arrow: null, skipped: [], op: "LOAD_CONST (текст)", cue: "Рядок 2 [Команда 2]: Завантажуємо текстовий рядок." },
+      { tok: 'tok-w-print-2', arrow: null, skipped: [], op: "CALL_FUNCTION", cue: "Рядок 2 [Команда 3]: Виклик print()." },
+      { tok: null, arrow: 'arr-w-2-to-3', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Переходимо до заголовка циклу while (рядок 3)." },
+
+      // ==========================================
+      // ІТЕРАЦІЯ 1: while count > 0 (2 > 0 -> True)
+      // ==========================================
+      { tok: 'tok-w-count-3', arrow: null, skipped: [], op: "LOAD_NAME (count)", cue: "Рядок 3 [Ітерація 1, Крок 1]: Читаємо count з пам'яті (зараз 2)." },
+      { tok: 'tok-w-0-3', arrow: null, skipped: [], op: "LOAD_CONST (0)", cue: "Рядок 3 [Ітерація 1, Крок 2]: Завантажуємо константу 0." },
+      { tok: 'tok-w-gt-3', arrow: null, skipped: [], op: "COMPARE_OP (>)", cue: "Рядок 3 [Ітерація 1, Крок 3]: Порівняння: 2 > 0. Результат: TRUE!" },
+      { tok: 'tok-w-while-3', arrow: null, skipped: [], op: "POP_JUMP_IF_FALSE", cue: "Рядок 3 [Ітерація 1, Крок 4]: Умова істинна — входимо в тіло циклу." },
+      { tok: null, arrow: 'arr-w-3-to-4', skipped: [], op: "ENTER_LOOP_BODY", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Вхід у тіло циклу: від кінця рядка 3 до межі тексту рядка 4." },
+
+      // Рядок 4: print("Крок:")
+      { tok: 'tok-w-print-4', arrow: null, skipped: [], op: "LOAD_NAME (print)", cue: "Рядок 4 [Ітерація 1]: Завантажуємо print." },
+      { tok: 'tok-w-str-4', arrow: null, skipped: [], op: "LOAD_CONST (\"Крок:\")", cue: "Рядок 4 [Ітерація 1]: Друк підпису \"Крок:\"." },
+      { tok: 'tok-w-print-4', arrow: null, skipped: [], op: "CALL_FUNCTION", cue: "Рядок 4 [Ітерація 1]: Виклик print()." },
+      { tok: null, arrow: 'arr-w-4-to-5', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Перехід до рядка 5." },
+
+      // Рядок 5: print(count)
+      { tok: 'tok-w-print-5', arrow: null, skipped: [], op: "LOAD_NAME (print)", cue: "Рядок 5 [Ітерація 1]: Завантажуємо print." },
+      { tok: 'tok-w-count-5', arrow: null, skipped: [], op: "LOAD_NAME (count)", cue: "Рядок 5 [Ітерація 1]: Читаємо count (2)." },
+      { tok: 'tok-w-print-5', arrow: null, skipped: [], op: "CALL_FUNCTION", cue: "Рядок 5 [Ітерація 1]: Виклик print(). Надруковано 2." },
+      { tok: null, arrow: 'arr-w-5-to-6', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Перехід до декременту на рядку 6." },
+
+      // Рядок 6: count = count - 1
+      { tok: 'tok-w-count-6-src', arrow: null, skipped: [], op: "LOAD_NAME (count)", cue: "Рядок 6 [Ітерація 1]: Читаємо count (2) для віднімання." },
+      { tok: 'tok-w-1-6', arrow: null, skipped: [], op: "LOAD_CONST (1)", cue: "Рядок 6 [Ітерація 1]: Завантажуємо 1." },
+      { tok: 'tok-w-sub-6', arrow: null, skipped: [], op: "BINARY_SUBTRACT (-)", cue: "Рядок 6 [Ітерація 1]: Віднімання: 2 - 1 = 1." },
+      { tok: 'tok-w-count-6-tgt', arrow: null, skipped: [], op: "STORE_NAME (count)", cue: "Рядок 6 [Ітерація 1]: Записуємо нове значення 1 у count." },
+
+      // ПОВЕРНЕННЯ ↺
+      { tok: null, arrow: 'arr-w-6-to-3', skipped: [], op: "JUMP_ABSOLUTE (↺)", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: ПОВТОР ↺! Від кінця рядка 6 стрілка летить вгору на перевірку умови (рядок 3)." },
+
+      // ==========================================
+      // ІТЕРАЦІЯ 2: while count > 0 (1 > 0 -> True)
+      // ==========================================
+      { tok: 'tok-w-count-3', arrow: null, skipped: [], op: "LOAD_NAME (count)", cue: "Рядок 3 [Ітерація 2, Крок 1]: Зчитуємо оновлене значення count (воно дорівнює 1)." },
+      { tok: 'tok-w-0-3', arrow: null, skipped: [], op: "LOAD_CONST (0)", cue: "Рядок 3 [Ітерація 2, Крок 2]: Знову завантажуємо 0." },
+      { tok: 'tok-w-gt-3', arrow: null, skipped: [], op: "COMPARE_OP (>)", cue: "Рядок 3 [Ітерація 2, Крок 3]: Порівняння: 1 > 0. Результат знову: TRUE!" },
+      { tok: 'tok-w-while-3', arrow: null, skipped: [], op: "POP_JUMP_IF_FALSE", cue: "Рядок 3 [Ітерація 2, Крок 4]: Умова виконується — продовжуємо цикл." },
+      { tok: null, arrow: 'arr-w-3-to-4', skipped: [], op: "ENTER_LOOP_BODY", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Вдруге входимо в тіло циклу (рядок 4)." },
+
+      // Рядок 4: print("Крок:")
+      { tok: 'tok-w-print-4', arrow: null, skipped: [], op: "LOAD_NAME (print)", cue: "Рядок 4 [Ітерація 2]: Завантажуємо print." },
+      { tok: 'tok-w-str-4', arrow: null, skipped: [], op: "LOAD_CONST (\"Крок:\")", cue: "Рядок 4 [Ітерація 2]: Друк підпису \"Крок:\"." },
+      { tok: 'tok-w-print-4', arrow: null, skipped: [], op: "CALL_FUNCTION", cue: "Рядок 4 [Ітерація 2]: Виклик print()." },
+      { tok: null, arrow: 'arr-w-4-to-5', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Перехід до рядка 5." },
+
+      // Рядок 5: print(count)
+      { tok: 'tok-w-print-5', arrow: null, skipped: [], op: "LOAD_NAME (print)", cue: "Рядок 5 [Ітерація 2]: Завантажуємо print." },
+      { tok: 'tok-w-count-5', arrow: null, skipped: [], op: "LOAD_NAME (count)", cue: "Рядок 5 [Ітерація 2]: Читаємо count (1)." },
+      { tok: 'tok-w-print-5', arrow: null, skipped: [], op: "CALL_FUNCTION", cue: "Рядок 5 [Ітерація 2]: Виклик print(). Надруковано 1." },
+      { tok: null, arrow: 'arr-w-5-to-6', skipped: [], op: "JUMP_NEXT_LINE", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: Перехід до рядка 6." },
+
+      // Рядок 6: count = count - 1
+      { tok: 'tok-w-count-6-src', arrow: null, skipped: [], op: "LOAD_NAME (count)", cue: "Рядок 6 [Ітерація 2]: Читаємо count (1)." },
+      { tok: 'tok-w-1-6', arrow: null, skipped: [], op: "LOAD_CONST (1)", cue: "Рядок 6 [Ітерація 2]: Завантажуємо 1." },
+      { tok: 'tok-w-sub-6', arrow: null, skipped: [], op: "BINARY_SUBTRACT (-)", cue: "Рядок 6 [Ітерація 2]: Віднімання: 1 - 1 = 0." },
+      { tok: 'tok-w-count-6-tgt', arrow: null, skipped: [], op: "STORE_NAME (count)", cue: "Рядок 6 [Ітерація 2]: Записуємо 0 у змінну count." },
+
+      // ПОВЕРНЕННЯ ↺
+      { tok: null, arrow: 'arr-w-6-to-3', skipped: [], op: "JUMP_ABSOLUTE (↺)", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: ПОВТОР ↺! Вдруге повертаємося на рядок 3 для фінальної перевірки." },
+
+      // ==========================================
+      // ІТЕРАЦІЯ 3: while count > 0 (0 > 0 -> FALSE!)
+      // ==========================================
+      { tok: 'tok-w-count-3', arrow: null, skipped: [], op: "LOAD_NAME (count)", cue: "Рядок 3 [Ітерація 3, Крок 1]: Читаємо count (воно дорівнює 0)." },
+      { tok: 'tok-w-0-3', arrow: null, skipped: [], op: "LOAD_CONST (0)", cue: "Рядок 3 [Ітерація 3, Крок 2]: Завантажуємо 0." },
+      { tok: 'tok-w-gt-3', arrow: null, skipped: [], op: "COMPARE_OP (>)", cue: "Рядок 3 [Ітерація 3, Крок 3]: Порівняння: 0 > 0. Результат: FALSE (Хиба)!" },
+      { tok: 'tok-w-while-3', arrow: null, skipped: [], op: "POP_JUMP_IF_FALSE", cue: "Рядок 3 [Ітерація 3, Крок 4]: Умова ХИБНА! Цикл завершено. Тіло (рядки 4, 5, 6) оминається!" },
+
+      // СТРІЛКА ВИХОДУ З ЦИКЛУ (3 -> 7)
+      { tok: null, arrow: 'arr-w-3-to-7', skipped: ['line-4', 'line-5', 'line-6'], op: "JUMP_OUT_OF_LOOP", cue: "ПЕРЕХІД ЗА СТРІЛКОЮ: ВИХІД З ЦИКЛУ! Від кінця рядка 3 стрілка перелітає рядки 4, 5, 6 прямо на рядок 7!" },
+
+      // Рядок 7: print("Цикл завершено!")
+      { tok: 'tok-w-print-7', arrow: null, skipped: ['line-4', 'line-5', 'line-6'], op: "LOAD_NAME (print)", cue: "Рядок 7 [Команда 1]: Завантажуємо print." },
+      { tok: 'tok-w-str-7', arrow: null, skipped: ['line-4', 'line-5', 'line-6'], op: "LOAD_CONST (текст)", cue: "Рядок 7 [Команда 2]: Завантажуємо текст \"Цикл завершено!\"." },
+      { tok: 'tok-w-print-7', arrow: null, skipped: ['line-4', 'line-5', 'line-6'], op: "CALL_FUNCTION", cue: "Рядок 7 [Команда 3]: Виклик print(). Програму успішно закінчено!" }
+    ]
+  }
+};
+
+let currentScenarioKey = 'linear';
+let curIdx = 0;
+
+function getTextAnchor(lineId) {
+  const lineEl = document.getElementById(lineId);
+  if (!lineEl) return null;
+  const textSpan = lineEl.querySelector('.code-text-content');
+  const container = document.getElementById('code-container');
+  if (!textSpan || !container) return null;
+
+  const cBox = container.getBoundingClientRect();
+  const tBox = textSpan.getBoundingClientRect();
+
+  return {
+    startX: tBox.left - cBox.left,
+    endX: tBox.right - cBox.left,
+    centerY: (tBox.top - cBox.top) + (tBox.height / 2)
+  };
+}
+
+function renderArrows() {
+  const scen = SCENARIOS[currentScenarioKey];
+  const svg = document.getElementById('arrow-svg');
+  const container = document.getElementById('code-container');
+  const containerWidth = container.offsetWidth;
+
+  const defs = svg.querySelector('defs');
+  svg.innerHTML = '';
+  svg.appendChild(defs);
+
+  scen.arrows.forEach(arr => {
+    const from = getTextAnchor(`line-${arr.from}`);
+    const to = getTextAnchor(`line-${arr.to}`);
+    if (!from || !to) return;
+
+    let d = '';
+
+    if (arr.curve === 'seq-down') {
+      const cx = Math.max(from.endX, to.endX) + 26;
+      d = `M ${from.endX + 6} ${from.centerY} C ${cx} ${from.centerY}, ${cx} ${to.centerY}, ${to.endX + 10} ${to.centerY}`;
+    }
+    else if (arr.curve === 'into-block') {
+      const cx = Math.max(from.endX, to.endX) + 32;
+      d = `M ${from.endX + 6} ${from.centerY} C ${cx} ${from.centerY}, ${cx} ${to.centerY}, ${to.endX + 10} ${to.centerY}`;
+    }
+    else if (arr.curve === 'wide-jump') {
+      const cx = containerWidth - 36;
+      d = `M ${from.endX + 6} ${from.centerY} C ${cx} ${from.centerY}, ${cx} ${to.centerY}, ${to.endX + 10} ${to.centerY}`;
+    }
+    else if (arr.curve === 'loop-back') {
+      const cx = containerWidth - 26;
+      d = `M ${from.endX + 6} ${from.centerY} C ${cx} ${from.centerY}, ${cx} ${to.centerY}, ${to.endX + 10} ${to.centerY}`;
+    }
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('id', arr.id);
+    path.setAttribute('class', `arrow-path arr-type-${arr.type}`);
+    path.setAttribute('d', d);
+    path.setAttribute('marker-end', `url(#m-idle-${arr.type})`);
+    path.dataset.type = arr.type;
+    svg.appendChild(path);
+  });
+}
+
+function renderFrame(idx) {
+  const scen = SCENARIOS[currentScenarioKey];
+  const f = scen.frames[idx];
+
+  // 1. Токени
+  document.querySelectorAll('.tok').forEach(el => el.classList.remove('pc-focus'));
+  if (f.tok) {
+    const tokEl = document.getElementById(f.tok);
+    if (tokEl) tokEl.classList.add('pc-focus');
+  }
+
+  // 2. Пропущені рядки
+  document.querySelectorAll('.code-line').forEach(el => el.classList.remove('skipped'));
+  if (f.skipped && f.skipped.length > 0) {
+    f.skipped.forEach(lineId => {
+      const lineEl = document.getElementById(lineId);
+      if (lineEl) lineEl.classList.add('skipped');
+    });
+  }
+
+  // 3. Стрілки
+  document.querySelectorAll('.arrow-path').forEach(p => {
+    p.classList.remove('active-arrow');
+    p.setAttribute('marker-end', `url(#m-idle-${p.dataset.type})`);
+  });
+
+  if (f.arrow) {
+    const arrowEl = document.getElementById(f.arrow);
+    if (arrowEl) {
+      arrowEl.classList.add('active-arrow');
+      arrowEl.setAttribute('marker-end', 'url(#m-active)');
+    }
+  }
+
+  // 4. Опис та лічильник
+  document.getElementById('cue-text').textContent = f.cue;
+  document.getElementById('op-badge').textContent = f.op;
+  document.getElementById('step-counter').textContent = `Крок ${idx} / ${scen.frames.length - 1}`;
+  document.getElementById('next-btn').disabled = (idx >= scen.frames.length - 1);
+}
+
+function switchScenario(key) {
+  currentScenarioKey = key;
+  curIdx = 0;
+
+  document.querySelectorAll('.scen-btn').forEach(b => b.classList.remove('active'));
+  if (key === 'linear') document.getElementById('btn-scen-linear').classList.add('active');
+  if (key === 'if-true') document.getElementById('btn-scen-if-true').classList.add('active');
+  if (key === 'if-false') document.getElementById('btn-scen-if-false').classList.add('active');
+  if (key === 'while') document.getElementById('btn-scen-while').classList.add('active');
+
+  document.getElementById('code-lines').innerHTML = SCENARIOS[key].html;
+
+  setTimeout(() => {
+    renderArrows();
+    renderFrame(0);
+  }, 30);
+}
+
+function stepForward() {
+  const scen = SCENARIOS[currentScenarioKey];
+  if (curIdx < scen.frames.length - 1) {
+    curIdx++;
+    renderFrame(curIdx);
+  }
+}
+
+function stepBackward() {
+  if (curIdx > 0) {
+    curIdx--;
+    renderFrame(curIdx);
+  }
+}
+
+function resetFrames() {
+  curIdx = 0;
+  renderFrame(0);
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === ' ') {
+    e.preventDefault();
+    stepForward();
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    stepBackward();
+  }
+});
+
+window.addEventListener('resize', () => {
+  renderArrows();
+  renderFrame(curIdx);
+});
+
+// Старт із лінійного алгоритму
+switchScenario('linear');
+</script>
+</body>
+</html>

@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Python 'break' vs 'continue' Loop Visualization</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #f8fafc;
+      color: #0f172a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 700px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Mode Selector */
+    .mode-bar {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      padding: 8px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .mode-btn {
+      flex: 1;
+      max-width: 180px;
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: monospace;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .mode-btn.active {
+      background: #2563eb;
+      color: #ffffff;
+      border-color: #1d4ed8;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+    }
+
+    /* Controls Bar */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      padding: 12px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .ctrl-btn {
+      background: #ffffff;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    .ctrl-btn:hover:not(:disabled) {
+      background: #f8fafc;
+      border-color: #94a3b8;
+      color: #0f172a;
+    }
+
+    .ctrl-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* Toggle Trace Button Active State */
+    .ctrl-btn.toggle-on {
+      background: #eff6ff;
+      border-color: #3b82f6;
+      color: #1d4ed8;
+      font-weight: 600;
+    }
+
+    /* Code Window */
+    .editor-window {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+    }
+
+    .window-header {
+      background: #f1f5f9;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+    }
+    .dot.red { background: #ef4444; }
+    .dot.yellow { background: #f59e0b; }
+    .dot.green { background: #10b981; }
+
+    .code-container {
+      position: relative;
+      padding: 16px 16px 16px 24px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 15px;
+      line-height: 1.7;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* SVG Overlay for Real Thread Accumulation */
+    #trace-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .thread-line {
+      fill: none;
+      stroke: #2563eb;
+      stroke-width: 2px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.85;
+    }
+
+    /* Code Blocks */
+    .code-block {
+      border-radius: 6px;
+      border: 1.5px solid transparent;
+      padding: 2px 4px;
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+    }
+
+    /* Active Block Shading */
+    .code-block.block-before.active {
+      background: rgba(14, 165, 233, 0.08);
+      border-color: #0284c7;
+      box-shadow: 0 0 10px rgba(14, 165, 233, 0.15);
+    }
+
+    .code-block.block-for-line.active {
+      background: rgba(168, 85, 247, 0.08);
+      border-color: #9333ea;
+      box-shadow: 0 0 10px rgba(168, 85, 247, 0.15);
+    }
+
+    .code-block.block-body.active {
+      background: rgba(245, 158, 11, 0.08);
+      border-color: #d97706;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.15);
+    }
+
+    .code-block.block-after.active {
+      background: rgba(16, 185, 129, 0.08);
+      border-color: #059669;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
+    }
+
+    /* Code Line */
+    .code-line {
+      display: flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+
+    .code-line .pointer {
+      width: 20px;
+      color: transparent;
+      font-size: 11px;
+      user-select: none;
+      transition: color 0.15s;
+    }
+
+    .code-line .line-num {
+      width: 26px;
+      color: #94a3b8;
+      user-select: none;
+      font-size: 13px;
+    }
+
+    .code-line .line-content {
+      white-space: pre;
+    }
+
+    /* Active Line Highlight */
+    .code-line.active {
+      background: rgba(37, 99, 235, 0.12);
+    }
+
+    .code-line.active .pointer {
+      color: #2563eb;
+    }
+
+    .code-line.active .line-num {
+      color: #0f172a;
+      font-weight: bold;
+    }
+
+    /* Python Syntax Highlighting */
+    .kw { color: #cf222e; font-weight: bold; }
+    .fn { color: #8250df; }
+    .num { color: #0550ae; }
+    .str { color: #0a3069; }
+    .op { color: #cf222e; }
+
+    /* Output Console */
+    .output-window {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-family: monospace;
+      font-size: 14px;
+      min-height: 86px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .output-title {
+      color: #64748b;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      user-select: none;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .output-log {
+      color: #0369a1;
+      line-height: 1.5;
+      white-space: pre-line;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Mode Selector -->
+  <div class="mode-bar">
+    <button class="mode-btn active" id="mode-break" data-mode="break">break</button>
+    <button class="mode-btn" id="mode-continue" data-mode="continue">continue</button>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="ctrl-btn" id="btn-back">⏮ Step Back</button>
+    <button class="ctrl-btn" id="btn-forward">⏭ Step Forward</button>
+    <button class="ctrl-btn" id="btn-play">▶ Play</button>
+    <button class="ctrl-btn" id="btn-pause" disabled>⏸ Pause</button>
+    <button class="ctrl-btn" id="btn-reset">↺ Reset</button>
+    <button class="ctrl-btn toggle-on" id="btn-toggle-trace">Trace: ON</button>
+  </div>
+
+  <!-- Editor Window -->
+  <div class="editor-window">
+    <div class="window-header">
+      <span class="dot red"></span>
+      <span class="dot yellow"></span>
+      <span class="dot green"></span>
+    </div>
+
+    <div class="code-container">
+      <!-- SVG overlay for accumulated thread & tiny spider dot -->
+      <svg id="trace-svg">
+        <path id="thread-path" class="thread-line" d=""></path>
+        <circle id="spider-marker" r="4.5" fill="#2563eb" stroke="#ffffff" stroke-width="1.5" cx="-100" cy="-100"></circle>
+      </svg>
+
+      <!-- Block 1: Before 'for' -->
+      <div class="code-block block-before" id="block-before">
+        <div class="code-line" id="line-1">
+          <span class="pointer">▶</span>
+          <span class="line-num">1</span>
+          <span class="line-content">numbers <span class="op">=</span> <span class="fn">range</span>(<span class="num">1</span>, <span class="num">5</span>)</span>
+        </div>
+      </div>
+
+      <!-- Block 2: 'for' Line -->
+      <div class="code-block block-for-line" id="block-for-line">
+        <div class="code-line" id="line-2">
+          <span class="pointer">▶</span>
+          <span class="line-num">2</span>
+          <span class="line-content"><span class="kw">for</span> x <span class="kw">in</span> numbers:</span>
+        </div>
+      </div>
+
+      <!-- Block 3: 'for' Body -->
+      <div class="code-block block-body" id="block-body">
+        <div class="code-line" id="line-3">
+          <span class="pointer">▶</span>
+          <span class="line-num">3</span>
+          <span class="line-content">    <span class="kw">if</span> x <span class="op">==</span> <span class="num">3</span>:</span>
+        </div>
+        <div class="code-line" id="line-4">
+          <span class="pointer">▶</span>
+          <span class="line-num">4</span>
+          <span class="line-content" id="keyword-line">        <span class="kw">break</span></span>
+        </div>
+        <div class="code-line" id="line-5">
+          <span class="pointer">▶</span>
+          <span class="line-num">5</span>
+          <span class="line-content">    <span class="fn">print</span>(x)</span>
+        </div>
+      </div>
+
+      <!-- Block 4: After 'for' -->
+      <div class="code-block block-after" id="block-after">
+        <div class="code-line" id="line-6">
+          <span class="pointer">▶</span>
+          <span class="line-num">6</span>
+          <span class="line-content"><span class="fn">print</span>(<span class="str">"Done"</span>)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal Output -->
+  <div class="output-window">
+    <div class="output-title">Output</div>
+    <div class="output-log" id="terminal"></div>
+  </div>
+</div>
+
+<script>
+  // ==============================================================
+  // CONFIGURATION: Adjust animation playback interval (ms) here
+  // ==============================================================
+  const ANIMATION_SPEED_MS = 850;
+
+  // Step sequences for 'break' vs 'continue'
+  const scenarios = {
+    break: [
+      { line: 1, block: 'block-before',   outputs: [] },
+      { line: 2, block: 'block-for-line', outputs: [] },
+      { line: 3, block: 'block-body',     outputs: [] },
+      { line: 5, block: 'block-body',     outputs: ['1'] },
+      { line: 2, block: 'block-for-line', outputs: ['1'] },
+      { line: 3, block: 'block-body',     outputs: ['1'] },
+      { line: 5, block: 'block-body',     outputs: ['1', '2'] },
+      { line: 2, block: 'block-for-line', outputs: ['1', '2'] },
+      { line: 3, block: 'block-body',     outputs: ['1', '2'] },
+      { line: 4, block: 'block-body',     outputs: ['1', '2'] },
+      { line: 6, block: 'block-after',    outputs: ['1', '2', 'Done'] }
+    ],
+    continue: [
+      { line: 1, block: 'block-before',   outputs: [] },
+      { line: 2, block: 'block-for-line', outputs: [] },
+      { line: 3, block: 'block-body',     outputs: [] },
+      { line: 5, block: 'block-body',     outputs: ['1'] },
+      { line: 2, block: 'block-for-line', outputs: ['1'] },
+      { line: 3, block: 'block-body',     outputs: ['1'] },
+      { line: 5, block: 'block-body',     outputs: ['1', '2'] },
+      { line: 2, block: 'block-for-line', outputs: ['1', '2'] },
+      { line: 3, block: 'block-body',     outputs: ['1', '2'] },
+      { line: 4, block: 'block-body',     outputs: ['1', '2'] },
+      { line: 2, block: 'block-for-line', outputs: ['1', '2'] },
+      { line: 3, block: 'block-body',     outputs: ['1', '2'] },
+      { line: 5, block: 'block-body',     outputs: ['1', '2', '4'] },
+      { line: 2, block: 'block-for-line', outputs: ['1', '2', '4'] },
+      { line: 6, block: 'block-after',    outputs: ['1', '2', '4', 'Done'] }
+    ]
+  };
+
+  // Generate slight random x-jitter for each step in scenario so loop turns remain distinguishable
+  function initScenarioJitter(mode) {
+    scenarios[mode].forEach((step) => {
+      // Random offset within [-8px, +8px] around the line's pointer
+      step.xOffset = (Math.random() - 0.5) * 16;
+    });
+  }
+
+  initScenarioJitter('break');
+  initScenarioJitter('continue');
+
+  let currentMode = 'break';
+  let currentStep = 0;
+  let timer = null;
+  let traceEnabled = true;
+
+  const btnBack = document.getElementById('btn-back');
+  const btnForward = document.getElementById('btn-forward');
+  const btnPlay = document.getElementById('btn-play');
+  const btnPause = document.getElementById('btn-pause');
+  const btnReset = document.getElementById('btn-reset');
+  const btnToggleTrace = document.getElementById('btn-toggle-trace');
+  const terminal = document.getElementById('terminal');
+  const keywordLine = document.getElementById('keyword-line');
+
+  const modeBreak = document.getElementById('mode-break');
+  const modeContinue = document.getElementById('mode-continue');
+
+  const allBlocks = document.querySelectorAll('.code-block');
+  const allLines = document.querySelectorAll('.code-line');
+  const codeContainer = document.querySelector('.code-container');
+  const traceSvg = document.getElementById('trace-svg');
+  const threadPath = document.getElementById('thread-path');
+  const spiderMarker = document.getElementById('spider-marker');
+
+  // Compute exact coordinates of the pointer on a given line
+  function getLineCoordinates(lineNum, xOffset = 0) {
+    const lineEl = document.getElementById(`line-${lineNum}`);
+    const ptrEl = lineEl.querySelector('.pointer');
+    const ptrRect = ptrEl.getBoundingClientRect();
+    const contRect = codeContainer.getBoundingClientRect();
+
+    return {
+      x: ptrRect.left - contRect.left + ptrRect.width / 2 + xOffset,
+      y: ptrRect.top - contRect.top + ptrRect.height / 2
+    };
+  }
+
+  // Accumulate the real coordinate history and draw the line
+  function updateAccumulatedTrace() {
+    if (!traceEnabled) {
+      traceSvg.style.display = 'none';
+      return;
+    }
+    traceSvg.style.display = 'block';
+
+    const steps = scenarios[currentMode];
+    const visitedCoordinates = [];
+
+    // Accumulate the real sequence of coordinates up to the current step
+    for (let i = 0; i <= currentStep; i++) {
+      const pt = getLineCoordinates(steps[i].line, steps[i].xOffset);
+      visitedCoordinates.push(pt);
+    }
+
+    // Build the SVG path string directly from the accumulated coordinates
+    const pathData = visitedCoordinates
+      .map((pt, idx) => `${idx === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`)
+      .join(' ');
+
+    threadPath.setAttribute('d', pathData);
+
+    // Place the tiny spider marker on the highlighted line at the latest coordinate
+    const head = visitedCoordinates[visitedCoordinates.length - 1];
+    spiderMarker.setAttribute('cx', head.x);
+    spiderMarker.setAttribute('cy', head.y);
+  }
+
+  function render() {
+    const steps = scenarios[currentMode];
+    const step = steps[currentStep];
+
+    // Highlight active code block
+    allBlocks.forEach(b => b.classList.remove('active'));
+    const activeBlock = document.getElementById(step.block);
+    if (activeBlock) {
+      activeBlock.classList.add('active');
+    }
+
+    // Highlight active line
+    allLines.forEach(l => l.classList.remove('active'));
+    const activeLine = document.getElementById(`line-${step.line}`);
+    if (activeLine) {
+      activeLine.classList.add('active');
+    }
+
+    // Update terminal output
+    terminal.textContent = step.outputs.join('\n');
+
+    // Update the real accumulated line trace & spider marker
+    updateAccumulatedTrace();
+
+    // Controls state
+    btnBack.disabled = currentStep === 0;
+    btnForward.disabled = currentStep === steps.length - 1;
+    btnReset.disabled = currentStep === 0 && !timer;
+  }
+
+  function stepForward() {
+    const steps = scenarios[currentMode];
+    if (currentStep < steps.length - 1) {
+      currentStep++;
+      render();
+    } else {
+      pause();
+    }
+  }
+
+  function stepBack() {
+    if (currentStep > 0) {
+      currentStep--;
+      render();
+    }
+  }
+
+  function play() {
+    if (timer) return;
+    const steps = scenarios[currentMode];
+    if (currentStep >= steps.length - 1) {
+      currentStep = 0;
+      render();
+    }
+    btnPlay.disabled = true;
+    btnPause.disabled = false;
+    timer = setInterval(() => {
+      if (currentStep < steps.length - 1) {
+        stepForward();
+      } else {
+        pause();
+      }
+    }, ANIMATION_SPEED_MS);
+  }
+
+  function pause() {
+    clearInterval(timer);
+    timer = null;
+    btnPlay.disabled = false;
+    btnPause.disabled = true;
+  }
+
+  function reset() {
+    pause();
+    currentStep = 0;
+    // Generate fresh offsets for a newly woven path
+    initScenarioJitter(currentMode);
+    render();
+  }
+
+  function setMode(mode) {
+    if (mode === currentMode) return;
+    pause();
+    currentMode = mode;
+
+    if (mode === 'break') {
+      modeBreak.classList.add('active');
+      modeContinue.classList.remove('active');
+      keywordLine.innerHTML = '        <span class="kw">break</span>';
+    } else {
+      modeContinue.classList.add('active');
+      modeBreak.classList.remove('active');
+      keywordLine.innerHTML = '        <span class="kw">continue</span>';
+    }
+
+    currentStep = 0;
+    initScenarioJitter(currentMode);
+    render();
+  }
+
+  function toggleTrace() {
+    traceEnabled = !traceEnabled;
+    btnToggleTrace.textContent = traceEnabled ? 'Trace: ON' : 'Trace: OFF';
+    btnToggleTrace.classList.toggle('toggle-on', traceEnabled);
+    updateAccumulatedTrace();
+  }
+
+  btnForward.addEventListener('click', () => { pause(); stepForward(); });
+  btnBack.addEventListener('click', () => { pause(); stepBack(); });
+  btnPlay.addEventListener('click', play);
+  btnPause.addEventListener('click', pause);
+  btnReset.addEventListener('click', reset);
+  btnToggleTrace.addEventListener('click', toggleTrace);
+
+  modeBreak.addEventListener('click', () => setMode('break'));
+  modeContinue.addEventListener('click', () => setMode('continue'));
+  window.addEventListener('resize', render);
+
+  // Initial draw
+  render();
+</script>
+</body>
+</html>

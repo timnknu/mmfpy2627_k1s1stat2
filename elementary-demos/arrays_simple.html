@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Змінні -> Масив (24 стовпці)</title>
+<style>
+    :root {
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --border: #cbd5e1;
+        --text: #0f172a;
+        --muted: #64748b;
+        --lamp-gold: #f59e0b;
+        --c-var: #0284c7;
+        --c-list: #7c3aed;
+    }
+
+    * { box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); user-select: none; }
+
+    /* Панель керування */
+    .top-bar {
+        max-width: 860px; margin: 0 auto 12px auto; display: flex;
+        justify-content: space-between; align-items: center; background: var(--card-bg);
+        padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+    }
+    .toggle-btn {
+        background: #0f172a; color: #fff; border: none; padding: 8px 16px;
+        border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold;
+        transition: background 0.15s;
+    }
+    .toggle-btn:hover { background: #334155; }
+
+    /* Сцена */
+    .stage {
+        max-width: 860px; margin: 0 auto; display: grid;
+        grid-template-columns: 150px 1fr; gap: 16px; position: relative;
+    }
+
+    /* Ліва панель */
+    .vars-panel {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .var-card {
+        border: 2px solid var(--c-var); background: #f0f9ff; border-radius: 6px;
+        padding: 6px 10px; font-size: 13px; font-weight: bold; color: var(--c-var);
+        display: flex; justify-content: space-between;
+    }
+    .unified-card {
+        border: 2px solid var(--c-list); background: #faf5ff; border-radius: 6px;
+        padding: 12px 10px; font-size: 13px; font-weight: bold; color: var(--c-list);
+        display: none; height: 100%; align-items: center; justify-content: center;
+        text-align: center;
+    }
+
+    /* Режим списку: відображення карток */
+    .is-list .var-card { display: none; }
+    .is-list .unified-card { display: flex; }
+
+    /* Права панель */
+    .matrix-card {
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 8px; padding: 12px 14px; position: relative;
+    }
+
+    /* Стовпці */
+    .cols-header {
+        display: flex; margin-left: 56px; margin-bottom: 4px; gap: 2px;
+    }
+    .col-idx {
+        width: 22px; text-align: center; font-size: 9px; color: var(--muted);
+    }
+    .col-idx.sep { border-right: 1px dashed #cbd5e1; }
+
+    /* Рядки матриці */
+    .rows-box { display: flex; flex-direction: column; gap: 8px; }
+    .row-line { display: flex; align-items: center; gap: 6px; }
+    .row-title { width: 50px; font-size: 10px; color: var(--muted); text-align: right; }
+
+    .lamps-container {
+        display: flex; gap: 2px; padding: 4px; background: #f8fafc;
+        border: 1px solid #e2e8f0; border-radius: 6px; position: relative;
+    }
+
+    /* Суцільна обгортка списку (З'являється в режимі списку) */
+    .list-outer-frame {
+        display: flex; gap: 2px; border: 2px solid transparent; border-radius: 6px;
+        padding: 2px; transition: border-color 0.2s; position: relative;
+    }
+    .is-list .list-outer-frame {
+        border-color: var(--c-list); background: rgba(124, 58, 237, 0.04);
+    }
+
+    /* 8-лампова область */
+    .byte-unit {
+        display: flex; gap: 2px; padding: 3px; border-radius: 4px;
+        border: 2px solid var(--c-var); background: rgba(2, 132, 199, 0.04);
+        position: relative; transition: all 0.2s;
+    }
+    .is-list .byte-unit {
+        border: 2px dashed var(--c-list);
+        background: transparent;
+    }
+
+    .unit-tag {
+        position: absolute; top: -9px; left: 4px; font-size: 8px; font-weight: bold;
+        padding: 0 4px; border-radius: 3px; background: var(--c-var); color: #fff;
+    }
+    .is-list .unit-tag {
+        background: var(--c-list);
+    }
+
+    /* Міні-лампа */
+    .lamp { width: 18px; display: flex; flex-direction: column; align-items: center; }
+    .lamp-svg { width: 18px; height: 24px; overflow: visible; }
+    .lamp-glow { opacity: 0; filter: blur(2px); fill: var(--lamp-gold); }
+    .lamp-shade { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 1.5; }
+    .lamp-bulb { fill: #cbd5e1; }
+    .lamp-stem, .lamp-base { stroke: #64748b; stroke-width: 1.5; fill: #f8fafc; }
+
+    .lit .lamp-glow { opacity: 0.85; }
+    .lit .lamp-shade { fill: #f59e0b; stroke: #d97706; }
+    .lit .lamp-bulb { fill: #fff; filter: drop-shadow(0 0 2px #fbbf24); }
+
+    /* SVG стрілки */
+    #arrows-layer {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        pointer-events: none; z-index: 100;
+    }
+    .arr-line {
+        fill: none; stroke: var(--c-var); stroke-width: 2; stroke-linecap: round;
+        transition: stroke 0.2s;
+    }
+    .arr-line.arr-unified { stroke: var(--c-list); stroke-width: 2.5; display: none; }
+    .is-list .arr-line { display: none; }
+    .is-list .arr-line.arr-unified { display: block; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+    <div id="status-label" style="font-size: 13px; font-weight: bold;">5 окремих змінних: x1, x2, x3, x4, x5</div>
+    <button class="toggle-btn" id="toggle-view-btn" onclick="toggleMode()">Згрупувати в список: x</button>
+</div>
+
+<div class="stage" id="main-stage">
+
+    <!-- ЛІВОРУЧ -->
+    <div class="vars-panel">
+        <div class="var-card" id="card-x1"><span>x1</span><span>= 5</span></div>
+        <div class="var-card" id="card-x2"><span>x2</span><span>= 3</span></div>
+        <div class="var-card" id="card-x3"><span>x3</span><span>= 8</span></div>
+        <div class="var-card" id="card-x4"><span>x4</span><span>= 1</span></div>
+        <div class="var-card" id="card-x5"><span>x5</span><span>= 6</span></div>
+
+        <div class="unified-card" id="card-unified">
+            x = [5, 3, 8, 1, 6]
+        </div>
+    </div>
+
+    <!-- ПРАВОРУЧ -->
+    <div class="matrix-card">
+        <div class="cols-header" id="cols-header"></div>
+        <div class="rows-box" id="rows-box"></div>
+    </div>
+
+    <!-- ШАР СТРІЛОК -->
+    <svg id="arrows-layer">
+        <defs>
+            <marker id="m-var" markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto">
+                <polygon points="0 0, 6 2.5, 0 5" fill="var(--c-var)" />
+            </marker>
+            <marker id="m-list" markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto">
+                <polygon points="0 0, 6 2.5, 0 5" fill="var(--c-list)" />
+            </marker>
+        </defs>
+        <path id="arr-0" class="arr-line" marker-end="url(#m-var)" d=""/>
+        <path id="arr-1" class="arr-line" marker-end="url(#m-var)" d=""/>
+        <path id="arr-2" class="arr-line" marker-end="url(#m-var)" d=""/>
+        <path id="arr-3" class="arr-line" marker-end="url(#m-var)" d=""/>
+        <path id="arr-4" class="arr-line" marker-end="url(#m-var)" d=""/>
+        <path id="arr-u" class="arr-line arr-unified" marker-end="url(#m-list)" d=""/>
+    </svg>
+
+</div>
+
+<script>
+let isListMode = false;
+const values = [5, 3, 8, 1, 6];
+
+function createMiniLamp(isLit) {
+    return `
+    <div class="lamp ${isLit ? 'lit' : ''}">
+        <svg class="lamp-svg" viewBox="0 0 34 42">
+            <circle class="lamp-glow" cx="17" cy="16" r="14" />
+            <ellipse class="lamp-base" cx="17" cy="38" rx="13" ry="2.5" />
+            <line class="lamp-stem" x1="17" y1="38" x2="17" y2="16" />
+            <circle class="lamp-bulb" cx="17" cy="16" r="3.5" />
+            <polygon class="lamp-shade" points="10,5 24,5 30,18 4,18" />
+        </svg>
+    </div>`;
+}
+
+function createByteUnit(idx, val) {
+    const el = document.createElement('div');
+    el.className = 'byte-unit';
+    el.id = `byte-unit-${idx}`;
+
+    const tag = document.createElement('div');
+    tag.className = 'unit-tag';
+    tag.id = `tag-${idx}`;
+    tag.textContent = isListMode ? `[${idx}]` : `x${idx+1}`;
+    el.appendChild(tag);
+
+    for (let b = 7; b >= 0; b--) {
+        const isLit = (val >> b) & 1;
+        el.insertAdjacentHTML('beforeend', createMiniLamp(isLit));
+    }
+    return el;
+}
+
+function createEmptyLamps(count) {
+    const el = document.createElement('div');
+    el.style.display = 'flex';
+    el.style.gap = '2px';
+    for (let i = 0; i < count; i++) {
+        el.insertAdjacentHTML('beforeend', createMiniLamp(false));
+    }
+    return el;
+}
+
+function renderMatrix() {
+    // 24 стовпці
+    const colHeader = document.getElementById('cols-header');
+    let hdr = '';
+    for (let c = 0; c < 24; c++) {
+        const isSep = ((c + 1) % 8 === 0 && c !== 23);
+        hdr += `<div class="col-idx ${isSep ? 'sep' : ''}">c${c}</div>`;
+    }
+    colHeader.innerHTML = hdr;
+
+    const rowsBox = document.getElementById('rows-box');
+    rowsBox.innerHTML = '';
+
+    // Рядок 0: 3 байти (x1, x2, x3 або [0], [1], [2])
+    const r0 = document.createElement('div');
+    r0.className = 'row-line';
+    r0.innerHTML = `<div class="row-title">Ряд 0</div>`;
+    const line0 = document.createElement('div');
+    line0.className = 'lamps-container';
+
+    const outer0 = document.createElement('div');
+    outer0.className = 'list-outer-frame';
+    outer0.id = 'outer-frame-0';
+    outer0.appendChild(createByteUnit(0, values[0]));
+    outer0.appendChild(createByteUnit(1, values[1]));
+    outer0.appendChild(createByteUnit(2, values[2]));
+    line0.appendChild(outer0);
+    r0.appendChild(line0);
+    rowsBox.appendChild(r0);
+
+    // Рядок 1: 2 байти (x4, x5 або [3], [4]) + 8 вільних
+    const r1 = document.createElement('div');
+    r1.className = 'row-line';
+    r1.innerHTML = `<div class="row-title">Ряд 1</div>`;
+    const line1 = document.createElement('div');
+    line1.className = 'lamps-container';
+
+    const outer1 = document.createElement('div');
+    outer1.className = 'list-outer-frame';
+    outer1.id = 'outer-frame-1';
+    outer1.appendChild(createByteUnit(3, values[3]));
+    outer1.appendChild(createByteUnit(4, values[4]));
+    line1.appendChild(outer1);
+    line1.appendChild(createEmptyLamps(8));
+    r1.appendChild(line1);
+    rowsBox.appendChild(r1);
+
+    // Рядок 2: 24 вільні лампи
+    const r2 = document.createElement('div');
+    r2.className = 'row-line';
+    r2.innerHTML = `<div class="row-title">Ряд 2</div>`;
+    const line2 = document.createElement('div');
+    line2.className = 'lamps-container';
+    line2.appendChild(createEmptyLamps(24));
+    r2.appendChild(line2);
+    rowsBox.appendChild(r2);
+
+    setTimeout(updateArrows, 30);
+}
+
+function updateArrows() {
+    const stage = document.getElementById('main-stage').getBoundingClientRect();
+
+    function drawPath(fromElId, toElId, pathId) {
+        const fromEl = document.getElementById(fromElId);
+        const toEl = document.getElementById(toElId);
+        const path = document.getElementById(pathId);
+        if (!fromEl || !toEl || !path) return;
+
+        const f = fromEl.getBoundingClientRect();
+        const t = toEl.getBoundingClientRect();
+
+        const startX = f.right - stage.left;
+        const startY = f.top + (f.height / 2) - stage.top;
+        const endX = t.left - stage.left - 4;
+        const endY = t.top + 8 - stage.top;
+
+        const midX = startX + (endX - startX) * 0.45;
+        path.setAttribute('d', `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`);
+    }
+
+    if (!isListMode) {
+        for (let i = 0; i < 5; i++) {
+            drawPath(`card-x${i+1}`, `byte-unit-${i}`, `arr-${i}`);
+        }
+    } else {
+        // У режимі списку — одна стрілка до першого елемента
+        drawPath('card-unified', 'byte-unit-0', 'arr-u');
+    }
+}
+
+function toggleMode() {
+    isListMode = !isListMode;
+    const stage = document.getElementById('main-stage');
+    const btn = document.getElementById('toggle-view-btn');
+    const lbl = document.getElementById('status-label');
+
+    stage.classList.toggle('is-list', isListMode);
+
+    if (isListMode) {
+        btn.textContent = "Розділити на окремі: x1..x5";
+        lbl.textContent = "Єдиний список: x = [5, 3, 8, 1, 6]";
+        for (let i = 0; i < 5; i++) {
+            document.getElementById(`tag-${i}`).textContent = `[${i}]`;
+        }
+    } else {
+        btn.textContent = "Згрупувати в список: x";
+        lbl.textContent = "5 окремих змінних: x1, x2, x3, x4, x5";
+        for (let i = 0; i < 5; i++) {
+            document.getElementById(`tag-${i}`).textContent = `x${i+1}`;
+        }
+    }
+
+    updateArrows();
+}
+
+window.addEventListener('load', renderMatrix);
+window.addEventListener('resize', updateArrows);
+</script>
+
+</body>
+</html>

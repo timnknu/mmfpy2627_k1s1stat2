@@ -3,7 +3,7 @@
 # Гарантується, що інших символів, крім пропусків та розділових знаків у реченні нема.
 
 txt = "kykuyvkutvu lubkuy, vt123ctjyc ku867756tcj cyjrcx"
-#txt = "hello"
+#txt = "hey py"
 L = []
 s = ''
 for c in txt:
@@ -15,6 +15,8 @@ for c in txt:
 if len(s) > 0:
     print('і ще слово:', s)
 
+#
+print(txt.split())
 # s = ''
 # for el in ['h', 'e', '1', '0', 'w']:
 #     s = s + el

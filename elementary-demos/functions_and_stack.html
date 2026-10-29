@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Call Stack Desk: Physical Scope Stacking</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #eef1f5;
+      color: #212529;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Top Controls Bar */
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid #d0d7de;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      z-index: 100;
+    }
+
+    .brand {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #343a40;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .scenario-picker {
+      font-size: 0.88rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      background: #ffffff;
+      color: #212529;
+      cursor: pointer;
+    }
+
+    .status-bar {
+      flex: 1;
+      max-width: 600px;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 0.82rem;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      color: #495057;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button {
+      background: #ffffff;
+      color: #495057;
+      border: 1px solid #ced4da;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    button:hover:not(:disabled) {
+      background: #f1f3f5;
+      border-color: #adb5bd;
+    }
+
+    button.btn-primary {
+      background: #1971c2;
+      color: #ffffff;
+      border-color: #1864ab;
+    }
+
+    button.btn-primary:hover:not(:disabled) {
+      background: #1864ab;
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .step-counter {
+      font-size: 0.85rem;
+      font-family: monospace;
+      color: #868e96;
+      min-width: 60px;
+      text-align: center;
+    }
+
+    /* Main Workspace */
+    .workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 460px 1fr;
+      overflow: hidden;
+    }
+
+    /* Left: Python Code Panel */
+    .code-panel {
+      background: #ffffff;
+      border-right: 1px solid #d0d7de;
+      padding: 24px 0;
+      overflow-y: auto;
+      font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+      font-size: 0.92rem;
+      line-height: 1.65;
+      counter-reset: line-counter;
+      white-space: pre; /* PRESERVE EXACT PYTHON INDENTATION */
+    }
+
+    .code-row {
+      display: flex;
+      padding: 1px 16px 1px 12px;
+      position: relative;
+      white-space: pre;
+    }
+
+    .code-row::before {
+      counter-increment: line-counter;
+      content: counter(line-counter);
+      width: 28px;
+      text-align: right;
+      color: #adb5bd;
+      margin-right: 20px;
+      font-size: 0.8rem;
+    }
+
+    .code-row.active {
+      background: #fff3bf;
+    }
+
+    .code-row.active::after {
+      content: "▶";
+      position: absolute;
+      left: 3px;
+      color: #f59f00;
+      font-size: 0.75rem;
+      top: 2px;
+    }
+
+    .code-text {
+      white-space: pre;
+    }
+
+    .kw  { color: #d6336c; font-weight: 700; }
+    .fn  { color: #0c8599; font-weight: 700; }
+    .num { color: #e8590c; font-weight: 600; }
+    .com { color: #868e96; font-style: italic; }
+
+    /* Right: Desk 3D Surface */
+    .desk-view {
+      background: #dfd8cd;
+      perspective: 1200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .desk-mat {
+      width: 92%;
+      height: 90%;
+      background: #e7dfd3;
+      border: 2px solid #cfc5b6;
+      border-radius: 14px;
+      box-shadow: 
+        inset 0 0 50px rgba(0, 0, 0, 0.05),
+        0 20px 40px rgba(0, 0, 0, 0.12);
+      transform: rotateX(20deg);
+      transform-style: preserve-3d;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    /* Stack Stage */
+    .stack-stage {
+      position: relative;
+      width: 560px;
+      height: 440px;
+      transform-style: preserve-3d;
+    }
+
+    /* Paper Sheets */
+    .paper-sheet {
+      position: absolute;
+      background: #ffffff;
+      border: 1px solid #d4cdbf;
+      border-radius: 6px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+      display: flex;
+      flex-direction: column;
+      transition: all 0.35s cubic-bezier(0.2, 0.9, 0.3, 1);
+      transform-origin: center center;
+    }
+
+    /* Layer 0: Global Scope Base Sheet (Largest) */
+    .sheet-global {
+      width: 560px;
+      height: 440px;
+      left: 0;
+      top: 0;
+      background: #fffefb;
+      padding: 16px 20px;
+      transform: translateZ(2px);
+    }
+
+    /* Frame Layer 0 (Large) */
+    .sheet-depth-0 {
+      width: 430px;
+      height: 330px;
+      right: 15px;
+      bottom: 15px;
+      padding: 14px 16px;
+      transform: translateZ(30px) rotate(-1deg);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Frame Layer 1 (Medium) */
+    .sheet-depth-1 {
+      width: 310px;
+      height: 230px;
+      right: 15px;
+      bottom: 15px;
+      padding: 12px 14px;
+      transform: translateZ(60px) rotate(1.5deg);
+      box-shadow: 0 18px 35px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Frame Layer 2 (Small) */
+    .sheet-depth-2 {
+      width: 200px;
+      height: 145px;
+      right: 15px;
+      bottom: 15px;
+      padding: 10px 12px;
+      transform: translateZ(90px) rotate(-1.5deg);
+      box-shadow: 0 22px 40px rgba(0, 0, 0, 0.24);
+    }
+
+    /* Sheets underneath top execution get dimmed/shadowed */
+    .paper-sheet.covered {
+      filter: brightness(0.92);
+    }
+
+    /* Stack Overflow Card Styling (Tower pile) */
+    .sheet-overflow-pile {
+      width: 320px;
+      height: 200px;
+      left: 120px;
+      top: 110px;
+      padding: 14px 16px;
+    }
+
+    .sheet-stage-wobble {
+      animation: wobble 0.35s infinite alternate ease-in-out;
+    }
+
+    @keyframes wobble {
+      0% { transform: rotateZ(-1deg) rotateX(2deg); }
+      100% { transform: rotateZ(1.5deg) rotateX(-1.5deg); }
+    }
+
+    .sheet-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1.5px solid #ece6dc;
+      padding-bottom: 5px;
+      margin-bottom: 8px;
+    }
+
+    .scope-title {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #1971c2;
+    }
+
+    .return-bookmark {
+      background: #fff9db;
+      border: 1px dashed #f59f00;
+      color: #d9480f;
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-size: 0.68rem;
+      font-family: monospace;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .vars-container {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.82rem;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .var-line {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border-bottom: 1px solid #f6f3ee;
+      transition: all 0.25s ease;
+    }
+
+    .var-line.highlight {
+      background: #fff3bf;
+      border-color: #fcc419;
+      font-weight: bold;
+    }
+
+    .v-name { color: #343a40; font-weight: 600; }
+    .v-val  { color: #2b8a3e; font-weight: 700; }
+
+    /* Returning badge */
+    .return-stamp {
+      margin-top: auto;
+      background: #ebfbee;
+      border: 1.5px solid #40c057;
+      color: #2b8a3e;
+      font-family: monospace;
+      font-size: 0.76rem;
+      font-weight: 700;
+      padding: 4px 6px;
+      border-radius: 4px;
+      text-align: center;
+    }
+
+    /* Overflow Alert */
+    .overflow-banner {
+      position: absolute;
+      background: #fff5f5;
+      border: 2px solid #fa5252;
+      color: #e03131;
+      padding: 16px 22px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.88rem;
+      font-weight: bold;
+      text-align: center;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);
+      transform: translateZ(260px);
+      display: none;
+      z-index: 500;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Controls -->
+  <header>
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1971c2" stroke-width="2.2">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+        <polyline points="2 17 12 22 22 17"></polyline>
+        <polyline points="2 12 12 17 22 12"></polyline>
+      </svg>
+      Call Stack Metaphor
+    </div>
+
+    <select id="scenarioSelect" class="scenario-picker" onchange="loadScenario(this.value)">
+      <option value="nested">1. Inner Function & Scope Visibility</option>
+      <option value="recursion">2. Recursion (factorial)</option>
+      <option value="overflow">3. Stack Overflow (Tower of Papers)</option>
+    </select>
+
+    <div class="status-bar" id="statusBar">Ready</div>
+
+    <div class="controls">
+      <button id="btnPrev" onclick="step(-1)">‹ Prev</button>
+      <span class="step-counter" id="stepCounter">1 / 1</span>
+      <button id="btnNext" class="btn-primary" onclick="step(1)">Next ›</button>
+      <button id="btnPlay" onclick="togglePlay()">Play</button>
+      <button onclick="reset()">Reset</button>
+    </div>
+  </header>
+
+  <!-- Workspace -->
+  <div class="workspace">
+    <!-- Left: Python Code Panel -->
+    <div class="code-panel" id="codePanel"></div>
+
+    <!-- Right: Desk 3D View -->
+    <div class="desk-view">
+      <div class="desk-mat">
+        <div class="stack-stage" id="stackStage">
+          <!-- Dynamically populated sheets -->
+          <div class="overflow-banner" id="overflowBanner">
+            RecursionError: maximum recursion depth exceeded
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* =====================================================================
+       SCENARIOS DATA WITH EXACT SYNCHRONIZATION & FIXED RETURN ADDRESSES
+       ===================================================================== */
+    const SCENARIOS = {
+      nested: {
+        code: [
+          `tax = 0.05`,
+          ``,
+          `def checkout(item_price):`,
+          `    cut = 10`,
+          ``,
+          `    def discount(price):`,
+          `        final_p = price - cut  # uses 'cut' from sheet below!`,
+          `        return final_p`,
+          ``,
+          `    saved = discount(item_price)`,
+          `    total = saved + (saved * tax)  # uses 'tax' from global sheet!`,
+          `    return total`,
+          ``,
+          `res = checkout(100)`
+        ],
+        steps: [
+          {
+            line: 1,
+            status: "Global: tax = 0.05 written on Base Sheet",
+            globals: { tax: "0.05" },
+            stack: []
+          },
+          {
+            line: 14,
+            status: "Line 14: Calling checkout(100) -> Saving return address (line 14)",
+            globals: { tax: "0.05" },
+            stack: []
+          },
+          {
+            line: 4,
+            status: "Inside checkout: parameter item_price=100. cut = 10 about to execute.",
+            globals: { tax: "0.05" },
+            stack: [
+              {
+                title: "checkout(item_price=100)",
+                ret: "line 14 (res = ...)",
+                vars: { item_price: 100 }
+              }
+            ]
+          },
+          {
+            line: 10,
+            status: "cut = 10 recorded. Line 10: Calling discount(100) -> Return address saved (line 10)",
+            globals: { tax: "0.05" },
+            stack: [
+              {
+                title: "checkout(item_price=100)",
+                ret: "line 14 (res = ...)",
+                vars: { item_price: 100, cut: 10 }
+              }
+            ]
+          },
+          {
+            line: 7,
+            status: "Inside discount: Small sheet placed! Reads 'cut' from exposed margin below.",
+            globals: { tax: "0.05" },
+            stack: [
+              {
+                title: "checkout(item_price=100)",
+                ret: "line 14 (res = ...)",
+                vars: { item_price: 100, cut: 10 },
+                highlightVar: "cut"
+              },
+              {
+                title: "discount(price=100)",
+                ret: "line 10 in checkout",
+                vars: { price: 100 }
+              }
+            ]
+          },
+          {
+            line: 8,
+            status: "Line 7 executed: final_p = 90 written. Line 8: returning 90.",
+            globals: { tax: "0.05" },
+            stack: [
+              {
+                title: "checkout(item_price=100)",
+                ret: "line 14 (res = ...)",
+                vars: { item_price: 100, cut: 10 }
+              },
+              {
+                title: "discount(price=100)",
+                ret: "line 10 in checkout",
+                vars: { price: 100, final_p: 90 },
+                returning: "90"
+              }
+            ]
+          },
+          {
+            line: 11,
+            status: "discount sheet discarded! saved=90 recorded. Line 11: reading 'tax' from Global Base Sheet.",
+            globals: { tax: "0.05" },
+            highlightGlobal: "tax",
+            stack: [
+              {
+                title: "checkout(item_price=100)",
+                ret: "line 14 (res = ...)",
+                vars: { item_price: 100, cut: 10, saved: 90 }
+              }
+            ]
+          },
+          {
+            line: 12,
+            status: "Line 11 executed: total = 94.50 written. Line 12: returning 94.50.",
+            globals: { tax: "0.05" },
+            stack: [
+              {
+                title: "checkout(item_price=100)",
+                ret: "line 14 (res = ...)",
+                vars: { item_price: 100, cut: 10, saved: 90, total: "94.50" },
+                returning: "94.50"
+              }
+            ]
+          },
+          {
+            line: 14,
+            status: "checkout sheet discarded! res = 94.50 written to Global Sheet. Done.",
+            globals: { tax: "0.05", res: "94.50" },
+            stack: []
+          }
+        ]
+      },
+
+      recursion: {
+        code: [
+          `def fact(n):`,
+          `    if n <= 1:`,
+          `        return 1`,
+          `    return n * fact(n - 1)`,
+          ``,
+          `ans = fact(3)`
+        ],
+        steps: [
+          {
+            line: 6,
+            status: "Line 6: Calling fact(3) -> Return address saved (line 6)",
+            globals: {},
+            stack: []
+          },
+          {
+            line: 2,
+            status: "fact(3): n=3. Check: 3 <= 1 is False -> moving to line 4",
+            globals: {},
+            stack: [
+              {
+                title: "fact(n=3)",
+                ret: "line 6 (ans = ...)",
+                vars: { n: 3 }
+              }
+            ]
+          },
+          {
+            line: 4,
+            status: "fact(3) calls fact(2) -> Frame 2 drops on top (ret: line 4 in fact(3))",
+            globals: {},
+            stack: [
+              {
+                title: "fact(n=3)",
+                ret: "line 6 (ans = ...)",
+                vars: { n: 3 }
+              },
+              {
+                title: "fact(n=2)",
+                ret: "line 4 in fact(3)",
+                vars: { n: 2 }
+              }
+            ]
+          },
+          {
+            line: 4,
+            status: "fact(2) calls fact(1) -> Frame 3 drops on top (ret: line 4 in fact(2))",
+            globals: {},
+            stack: [
+              {
+                title: "fact(n=3)",
+                ret: "line 6 (ans = ...)",
+                vars: { n: 3 }
+              },
+              {
+                title: "fact(n=2)",
+                ret: "line 4 in fact(3)",
+                vars: { n: 2 }
+              },
+              {
+                title: "fact(n=1)",
+                ret: "line 4 in fact(2)",
+                vars: { n: 1 }
+              }
+            ]
+          },
+          {
+            line: 3,
+            status: "fact(1): Base condition (1 <= 1) is True -> returning 1",
+            globals: {},
+            stack: [
+              {
+                title: "fact(n=3)",
+                ret: "line 6 (ans = ...)",
+                vars: { n: 3 }
+              },
+              {
+                title: "fact(n=2)",
+                ret: "line 4 in fact(3)",
+                vars: { n: 2 }
+              },
+              {
+                title: "fact(n=1)",
+                ret: "line 4 in fact(2)",
+                vars: { n: 1 },
+                returning: "1"
+              }
+            ]
+          },
+          {
+            line: 4,
+            status: "Frame 3 popped! fact(2) computes 2 * 1 = 2 -> returning 2 to fact(3)",
+            globals: {},
+            stack: [
+              {
+                title: "fact(n=3)",
+                ret: "line 6 (ans = ...)",
+                vars: { n: 3 }
+              },
+              {
+                title: "fact(n=2)",
+                ret: "line 4 in fact(3)",
+                vars: { n: 2 },
+                returning: "2"
+              }
+            ]
+          },
+          {
+            line: 4,
+            status: "Frame 2 popped! fact(3) computes 3 * 2 = 6 -> returning 6 to global",
+            globals: {},
+            stack: [
+              {
+                title: "fact(n=3)",
+                ret: "line 6 (ans = ...)",
+                vars: { n: 3 },
+                returning: "6"
+              }
+            ]
+          },
+          {
+            line: 6,
+            status: "Frame 1 popped! ans = 6 written on Global Sheet. Complete.",
+            globals: { ans: "6" },
+            stack: []
+          }
+        ]
+      },
+
+      overflow: {
+        code: [
+          `def recurse(x):`,
+          `    return recurse(x + 1)`,
+          ``,
+          `recurse(1)`
+        ],
+        steps: [
+          {
+            line: 4,
+            status: "Line 4 calls recurse(1) -> Pushing Frame 1",
+            globals: {},
+            pileCount: 1
+          },
+          {
+            line: 2,
+            status: "recurse(1) calls recurse(2) -> Pushing Frame 2",
+            globals: {},
+            pileCount: 2
+          },
+          {
+            line: 2,
+            status: "recurse(2) calls recurse(3) -> Pushing Frame 3",
+            globals: {},
+            pileCount: 3
+          },
+          {
+            line: 2,
+            status: "recurse(3) calls recurse(4) -> Pushing Frame 4",
+            globals: {},
+            pileCount: 4
+          },
+          {
+            line: 2,
+            status: "recurse(4) calls recurse(5) -> Pushing Frame 5",
+            globals: {},
+            pileCount: 5
+          },
+          {
+            line: 2,
+            status: "recurse(5) calls recurse(6) -> Pushing Frame 6 (Tower wobbles...)",
+            globals: {},
+            pileCount: 6,
+            wobble: true
+          },
+          {
+            line: 2,
+            status: "recurse(6) calls recurse(7) -> Pushing Frame 7",
+            globals: {},
+            pileCount: 7,
+            wobble: true
+          },
+          {
+            line: 2,
+            status: "recurse(7) calls recurse(8) -> Pushing Frame 8",
+            globals: {},
+            pileCount: 8,
+            wobble: true
+          },
+          {
+            line: 2,
+            status: "CRASH! System call stack exceeded memory limit.",
+            globals: {},
+            pileCount: 9,
+            crash: true
+          }
+        ]
+      }
+    };
+
+    /* =====================================================================
+       ENGINE & RENDERING
+       ===================================================================== */
+    let currentScenario = "nested";
+    let stepIndex = 0;
+    let timer = null;
+
+    function highlightSyntax(rawLine) {
+      if (!rawLine) return "&nbsp;";
+      return rawLine
+        .replace(/(#.*$)/g, '<span class="com">$1</span>')
+        .replace(/\b(def|return|if|else)\b/g, '<span class="kw">$1</span>')
+        .replace(/\b(checkout|discount|fact|recurse)\b(?=\()/g, '<span class="fn">$1</span>')
+        .replace(/\b(\d+(\.\d+)?)\b/g, '<span class="num">$1</span>');
+    }
+
+    function loadScenario(key) {
+      pause();
+      currentScenario = key;
+      stepIndex = 0;
+      renderCodePanel();
+      renderCurrentStep();
+    }
+
+    function renderCodePanel() {
+      const panel = document.getElementById("codePanel");
+      const lines = SCENARIOS[currentScenario].code;
+      panel.innerHTML = lines.map((line, idx) => {
+        return `<div class="code-row" id="row-${idx + 1}"><span class="code-text">${highlightSyntax(line)}</span></div>`;
+      }).join("");
+    }
+
+    function renderCurrentStep() {
+      const sc = SCENARIOS[currentScenario];
+      const s = sc.steps[stepIndex];
+
+      // 1. Line pointer update
+      document.querySelectorAll(".code-row").forEach(r => r.classList.remove("active"));
+      if (s.line) {
+        const activeRow = document.getElementById(`row-${s.line}`);
+        if (activeRow) activeRow.classList.add("active");
+      }
+
+      // 2. Status message
+      document.getElementById("statusBar").textContent = s.status;
+      document.getElementById("stepCounter").textContent = `${stepIndex + 1} / ${sc.steps.length}`;
+
+      // 3. Clear and render Stack Stage
+      const stage = document.getElementById("stackStage");
+      const overflowBanner = document.getElementById("overflowBanner");
+      stage.innerHTML = "";
+      stage.appendChild(overflowBanner);
+
+      if (s.wobble || s.crash) {
+        stage.classList.add("sheet-stage-wobble");
+      } else {
+        stage.classList.remove("sheet-stage-wobble");
+      }
+
+      // (A) Global Scope Base Sheet (Always on bottom)
+      const globalSheet = document.createElement("div");
+      globalSheet.className = "paper-sheet sheet-global";
+
+      const gKeys = Object.keys(s.globals);
+      let gVarsHtml = gKeys.map(k => `
+        <div class="var-line ${s.highlightGlobal === k ? 'highlight' : ''}">
+          <span class="v-name">${k}</span>
+          <span class="v-val">${s.globals[k]}</span>
+        </div>
+      `).join("");
+
+      if (gKeys.length === 0) {
+        gVarsHtml = `<span style="color:#adb5bd; font-size:0.8rem; font-style:italic;">(none)</span>`;
+      }
+
+      globalSheet.innerHTML = `
+        <div class="sheet-header">
+          <span class="scope-title">GLOBAL SCOPE (&lt;module&gt;)</span>
+          <span style="font-size:0.7rem; color:#8c8275;">Base Paper (Exposed Margin)</span>
+        </div>
+        <div style="max-width: 130px;" class="vars-container">
+          ${gVarsHtml}
+        </div>
+      `;
+      stage.appendChild(globalSheet);
+
+      // (B) Handle Stack Overflow Tower
+      if (currentScenario === "overflow") {
+        for (let i = 0; i < s.pileCount; i++) {
+          const card = document.createElement("div");
+          const z = (i + 1) * 22;
+          const rot = (i % 2 === 0 ? -1.5 : 2) + (i * 0.5);
+          card.className = "paper-sheet sheet-overflow-pile";
+          card.style.transform = `translateZ(${z}px) rotate(${rot}deg)`;
+          card.style.boxShadow = `0 ${8 + i * 2}px ${20 + i * 3}px rgba(0,0,0,0.18)`;
+
+          card.innerHTML = `
+            <div class="sheet-header">
+              <span class="scope-title">recurse(x=${i + 1})</span>
+              <span class="return-bookmark">↩ line ${i === 0 ? 4 : 2}</span>
+            </div>
+            <div class="vars-container">
+              <div class="var-line">
+                <span class="v-name">x</span>
+                <span class="v-val">${i + 1}</span>
+              </div>
+            </div>
+          `;
+          stage.appendChild(card);
+        }
+      } 
+      // (C) Handle Scope & Recursion (Nested Sized Frames)
+      else if (s.stack) {
+        s.stack.forEach((frame, idx) => {
+          const isTop = (idx === s.stack.length - 1);
+          const frameSheet = document.createElement("div");
+          frameSheet.className = `paper-sheet sheet-depth-${idx} ${!isTop ? 'covered' : ''}`;
+
+          const varsHtml = Object.entries(frame.vars).map(([k, v]) => `
+            <div class="var-line ${frame.highlightVar === k ? 'highlight' : ''}">
+              <span class="v-name">${k}</span>
+              <span class="v-val">${v}</span>
+            </div>
+          `).join("");
+
+          frameSheet.innerHTML = `
+            <div class="sheet-header">
+              <span class="scope-title">${frame.title}</span>
+              <span class="return-bookmark">↩ ${frame.ret}</span>
+            </div>
+            <div style="max-width: 140px;" class="vars-container">
+              ${varsHtml}
+            </div>
+            ${frame.returning ? `<div class="return-stamp">return ${frame.returning}</div>` : ''}
+          `;
+          stage.appendChild(frameSheet);
+        });
+      }
+
+      // (D) Overflow Crash Banner
+      if (s.crash) {
+        overflowBanner.style.display = "block";
+        pause();
+      } else {
+        overflowBanner.style.display = "none";
+      }
+
+      // Buttons state
+      document.getElementById("btnPrev").disabled = (stepIndex === 0);
+      document.getElementById("btnNext").disabled = (stepIndex === sc.steps.length - 1);
+    }
+
+    function step(dir) {
+      const max = SCENARIOS[currentScenario].steps.length - 1;
+      const target = stepIndex + dir;
+      if (target >= 0 && target <= max) {
+        stepIndex = target;
+        renderCurrentStep();
+      } else {
+        pause();
+      }
+    }
+
+    function togglePlay() {
+      if (timer) {
+        pause();
+      } else {
+        play();
+      }
+    }
+
+    function play() {
+      const max = SCENARIOS[currentScenario].steps.length - 1;
+      if (stepIndex >= max) stepIndex = 0;
+      document.getElementById("btnPlay").textContent = "Pause";
+      timer = setInterval(() => {
+        if (stepIndex < max) {
+          step(1);
+        } else {
+          pause();
+        }
+      }, 1900);
+    }
+
+    function pause() {
+      clearInterval(timer);
+      timer = null;
+      document.getElementById("btnPlay").textContent = "Play";
+    }
+
+    function reset() {
+      pause();
+      stepIndex = 0;
+      renderCurrentStep();
+    }
+
+    // Initialize
+    loadScenario("nested");
+  </script>
+</body>
+</html>

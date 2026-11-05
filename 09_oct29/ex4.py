@@ -2,7 +2,7 @@ def print_matrix(A):
     print('Here is a matrix:')
     for r in A:
         for item in r:
-            print(f'{item:8}', end='    ')
+            print(f'{item:8}', end='  ')
         print()
 
 ####

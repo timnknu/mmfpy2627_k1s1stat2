@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="und">
+<head>
+  <meta charset="UTF-8">
+  <title>det(A₄ₓ₄) = ∑ (-1)ⁱ⁺¹ · aᵢ₁ · det(A_{\i,\1})</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+
+      --pivot: #0284c7;
+      --pivot-bg: #e0f2fe;
+      --pivot-border: #0284c7;
+
+      --del: #e11d48;
+      --del-bg: #ffe4e6;
+      --del-text: #f43f5e;
+
+      --keep: #059669;
+      --keep-bg: #d1fae5;
+      --keep-border: #10b981;
+
+      --sub-bg: #ecfdf5;
+      --sub-text: #047857;
+      --sub-border: #34d399;
+
+      --sign: #b45309;
+      --sign-bg: #fef3c7;
+      --sign-border: #d97706;
+
+      --d4: #7e22ce;
+      --d3: #4338ca;
+      --d2: #0f766e;
+      --d1: #c2410c;
+      --up: #be185d;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Cambria Math', 'STIX Two Math', 'KaTeX_Math', 'Fira Code', monospace;
+      padding: 30px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    /* Definition Header */
+    .def-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+    }
+
+    .formula-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      font-size: 1.3rem;
+      font-weight: 600;
+      flex-wrap: wrap;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-size: 0.95rem;
+      flex-wrap: wrap;
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Level Cards */
+    .level-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      border: 1px solid var(--border);
+      border-left: 6px solid var(--border);
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+    }
+
+    .level-card.l4 { border-left-color: var(--d4); }
+    .level-card.l3 { border-left-color: var(--d3); margin-left: 28px; }
+    .level-card.l2 { border-left-color: var(--d2); margin-left: 56px; }
+    .level-card.l1 { border-left-color: var(--d1); margin-left: 84px; }
+    .level-card.unwind { border-left-color: var(--up); }
+
+    .level-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1.15rem;
+      font-weight: bold;
+    }
+
+    .badge-n {
+      padding: 3px 12px;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-weight: 700;
+    }
+    .badge-n.l4 { background: #f3e8ff; color: var(--d4); border: 1px solid #d8b4fe; }
+    .badge-n.l3 { background: #e0e7ff; color: var(--d3); border: 1px solid #a5b4fc; }
+    .badge-n.l2 { background: #ccfbf1; color: var(--d2); border: 1px solid #5eead4; }
+    .badge-n.l1 { background: #ffedd5; color: var(--d1); border: 1px solid #fdba74; }
+    .badge-n.up { background: #fce7f3; color: var(--up); border: 1px solid #f9a8d4; }
+
+    /* Expansion Step Lines */
+    .step-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      background: #f8fafc;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid #edf2f7;
+    }
+
+    .op {
+      font-weight: bold;
+      color: var(--muted);
+      font-size: 1.15rem;
+    }
+
+    .sign-box {
+      background: var(--sign-bg);
+      color: var(--sign);
+      border: 1.5px solid var(--sign-border);
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-weight: bold;
+    }
+
+    .pivot-box {
+      background: var(--pivot-bg);
+      color: var(--pivot);
+      border: 2px solid var(--pivot-border);
+      padding: 2px 10px;
+      border-radius: 6px;
+      font-weight: bold;
+      box-shadow: 0 0 8px rgba(2, 132, 199, 0.15);
+    }
+
+    .arrow {
+      color: var(--muted);
+      font-size: 1.3rem;
+      font-weight: bold;
+    }
+
+    /* Determinant Delimiters */
+    .det {
+      display: inline-flex;
+      position: relative;
+      padding: 2px 7px;
+    }
+
+    .det::before,
+    .det::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      bottom: -2px;
+      width: 2.5px;
+      background: #1e293b;
+      border-radius: 1px;
+    }
+    .det::before { left: 0; }
+    .det::after { right: 0; }
+
+    /* Matrix Table Layout */
+    .m-table {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 3px;
+      position: relative;
+    }
+
+    .m-row {
+      display: flex;
+      gap: 3px;
+      position: relative;
+    }
+
+    /* Continuous Row Strike-through */
+    .m-row.del-row::after {
+      content: '';
+      position: absolute;
+      left: -5px;
+      right: -5px;
+      top: 50%;
+      height: 2.5px;
+      background: var(--del);
+      transform: translateY(-50%);
+      z-index: 6;
+      box-shadow: 0 0 3px rgba(225, 29, 72, 0.4);
+      pointer-events: none;
+    }
+
+    /* Cells */
+    .c {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.05rem;
+      position: relative;
+      user-select: none;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .c-norm {
+      color: var(--text);
+    }
+
+    /* Pivot Intersection */
+    .c-pivot {
+      background: var(--pivot-bg);
+      color: var(--pivot);
+      border: 2px solid var(--pivot-border);
+      font-weight: bold;
+      z-index: 10;
+      box-shadow: 0 0 10px rgba(2, 132, 199, 0.25);
+    }
+
+    /* Continuous Column 1 Strike-through */
+    .c-del-v::after {
+      content: '';
+      position: absolute;
+      top: -5px;
+      bottom: -5px;
+      left: 50%;
+      width: 2.5px;
+      background: var(--del);
+      transform: translateX(-50%);
+      z-index: 6;
+      box-shadow: 0 0 3px rgba(225, 29, 72, 0.4);
+      pointer-events: none;
+    }
+
+    /* Crossed-out background */
+    .c-del {
+      background: var(--del-bg);
+      color: var(--del-text);
+      opacity: 0.45;
+    }
+
+    /* Kept elements that compose the minor */
+    .c-keep {
+      background: var(--keep-bg);
+      color: var(--keep);
+      border: 1.5px dashed var(--keep-border);
+      font-weight: bold;
+    }
+
+    /* Submatrix Cells (Right of Arrow) */
+    .c-sub {
+      background: var(--sub-bg);
+      color: var(--sub-text);
+      border: 1px solid var(--sub-border);
+      font-weight: bold;
+    }
+
+    /* Calculations in Call Stack */
+    .calc-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.05rem;
+      flex-wrap: wrap;
+      padding: 8px 14px;
+      background: #f8fafc;
+      border-radius: 6px;
+      border: 1px solid #edf2f7;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- SYMBOLIC RECURRENCE & LEGEND -->
+  <div class="def-card">
+    <div class="formula-row">
+      <span>det(A<sub>n×n</sub>) =</span>
+      <span style="font-size: 2.4rem; font-weight: 300;">{</span>
+      <div style="display: flex; flex-direction: column; gap: 4px; font-size: 1.05rem;">
+        <div>A<sub>1,1</sub> , &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; n = 1</div>
+        <div>∑<sub>i=1</sub><sup>n</sup> (-1)<sup>i+1</sup> · A<sub>i,1</sub> · det(A<sub>∖ i, ∖ 1</sub>) , &nbsp;&nbsp; n &gt; 1</div>
+      </div>
+    </div>
+    <div class="legend-row">
+      <div class="legend-item">
+        <span class="sign-box">(-1)<sup>i+1</sup></span>
+      </div>
+      <div class="legend-item">
+        <span class="pivot-box">A<sub>i,1</sub></span>
+      </div>
+      <div class="legend-item">
+        <div class="c c-del" style="width: 24px; height: 24px; position: relative;">
+          <div style="position: absolute; width: 100%; height: 2px; background: var(--del); top: 50%; transform: translateY(-50%);"></div>
+          <div style="position: absolute; height: 100%; width: 2px; background: var(--del); left: 50%; transform: translateX(-50%);"></div>
+        </div>
+        <span>⟶ ∖ { i, 1 }</span>
+      </div>
+      <div class="legend-item">
+        <div class="c c-keep" style="width: 24px; height: 24px; font-size: 0.8rem;">A</div>
+        <span>⟶ A<sub>∖ i, ∖ 1</sub></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEVEL n = 4 -->
+  <div class="level-card l4">
+    <div class="level-header">
+      <span style="color: var(--d4);">⇓</span>
+      <span class="badge-n l4">n = 4</span>
+      <span class="op">⟶</span>
+      <span style="color: var(--d3); font-size: 1rem;">4 × [ n = 3 ]</span>
+    </div>
+
+    <!-- MAIN 4x4 MATRIX -->
+    <div style="display: flex; align-items: center; gap: 12px; font-size: 1.2rem; font-weight: bold; padding: 4px 0;">
+      <span>det(A) =</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-norm">2</div><div class="c c-norm">1</div><div class="c c-norm">3</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">2</div><div class="c c-norm">1</div><div class="c c-norm">3</div></div>
+          <div class="m-row"><div class="c c-norm">3</div><div class="c c-norm">1</div><div class="c c-norm">2</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">3</div><div class="c c-norm">1</div><div class="c c-norm">2</div></div>
+        </div>
+      </div>
+      <span>=</span>
+    </div>
+
+    <!-- i = 1 -->
+    <div class="step-line">
+      <span class="op">+</span>
+      <span class="sign-box">(-1)<sup>1+1</sup></span>
+      <span class="op">·</span>
+      <span class="pivot-box">2</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row del-row">
+            <div class="c c-pivot">2</div>
+            <div class="c c-del">1</div>
+            <div class="c c-del">3</div>
+            <div class="c c-del">1</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">1</div>
+            <div class="c c-keep">2</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">3</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">3</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">2</div>
+            <div class="c c-keep">1</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">1</div>
+            <div class="c c-keep">3</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">2</div>
+          </div>
+        </div>
+      </div>
+      <span class="arrow">═══════&gt;</span>
+      <span class="sign-box">+1</span>
+      <span class="op">·</span>
+      <span class="pivot-box">2</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-sub">2</div><div class="c c-sub">1</div><div class="c c-sub">3</div></div>
+          <div class="m-row"><div class="c c-sub">1</div><div class="c c-sub">2</div><div class="c c-sub">1</div></div>
+          <div class="m-row"><div class="c c-sub">3</div><div class="c c-sub">1</div><div class="c c-sub">2</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- i = 2 -->
+    <div class="step-line">
+      <span class="op">+</span>
+      <span class="sign-box">(-1)<sup>2+1</sup></span>
+      <span class="op">·</span>
+      <span class="pivot-box">1</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row">
+            <div class="c c-del c-del-v">2</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">3</div>
+            <div class="c c-keep">1</div>
+          </div>
+          <div class="m-row del-row">
+            <div class="c c-pivot">1</div>
+            <div class="c c-del">2</div>
+            <div class="c c-del">1</div>
+            <div class="c c-del">3</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">3</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">2</div>
+            <div class="c c-keep">1</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">1</div>
+            <div class="c c-keep">3</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">2</div>
+          </div>
+        </div>
+      </div>
+      <span class="arrow">═══════&gt;</span>
+      <span class="sign-box">-1</span>
+      <span class="op">·</span>
+      <span class="pivot-box">1</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-sub">1</div><div class="c c-sub">3</div><div class="c c-sub">1</div></div>
+          <div class="m-row"><div class="c c-sub">1</div><div class="c c-sub">2</div><div class="c c-sub">1</div></div>
+          <div class="m-row"><div class="c c-sub">3</div><div class="c c-sub">1</div><div class="c c-sub">2</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- i = 3 -->
+    <div class="step-line">
+      <span class="op">+</span>
+      <span class="sign-box">(-1)<sup>3+1</sup></span>
+      <span class="op">·</span>
+      <span class="pivot-box">3</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row">
+            <div class="c c-del c-del-v">2</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">3</div>
+            <div class="c c-keep">1</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">1</div>
+            <div class="c c-keep">2</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">3</div>
+          </div>
+          <div class="m-row del-row">
+            <div class="c c-pivot">3</div>
+            <div class="c c-del">1</div>
+            <div class="c c-del">2</div>
+            <div class="c c-del">1</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">1</div>
+            <div class="c c-keep">3</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">2</div>
+          </div>
+        </div>
+      </div>
+      <span class="arrow">═══════&gt;</span>
+      <span class="sign-box">+1</span>
+      <span class="op">·</span>
+      <span class="pivot-box">3</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-sub">1</div><div class="c c-sub">3</div><div class="c c-sub">1</div></div>
+          <div class="m-row"><div class="c c-sub">2</div><div class="c c-sub">1</div><div class="c c-sub">3</div></div>
+          <div class="m-row"><div class="c c-sub">3</div><div class="c c-sub">1</div><div class="c c-sub">2</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- i = 4 -->
+    <div class="step-line">
+      <span class="op">+</span>
+      <span class="sign-box">(-1)<sup>4+1</sup></span>
+      <span class="op">·</span>
+      <span class="pivot-box">1</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row">
+            <div class="c c-del c-del-v">2</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">3</div>
+            <div class="c c-keep">1</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">1</div>
+            <div class="c c-keep">2</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">3</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">3</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">2</div>
+            <div class="c c-keep">1</div>
+          </div>
+          <div class="m-row del-row">
+            <div class="c c-pivot">1</div>
+            <div class="c c-del">3</div>
+            <div class="c c-del">1</div>
+            <div class="c c-del">2</div>
+          </div>
+        </div>
+      </div>
+      <span class="arrow">═══════&gt;</span>
+      <span class="sign-box">-1</span>
+      <span class="op">·</span>
+      <span class="pivot-box">1</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-sub">1</div><div class="c c-sub">3</div><div class="c c-sub">1</div></div>
+          <div class="m-row"><div class="c c-sub">2</div><div class="c c-sub">1</div><div class="c c-sub">3</div></div>
+          <div class="m-row"><div class="c c-sub">1</div><div class="c c-sub">2</div><div class="c c-sub">1</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEVEL n = 3 (BRANCH 1) -->
+  <div class="level-card l3">
+    <div class="level-header">
+      <span style="color: var(--d3);">⇓</span>
+      <span class="badge-n l3">n = 3</span>
+      <span class="op">⟶</span>
+      <span style="color: var(--d2); font-size: 1rem;">3 × [ n = 2 ]</span>
+    </div>
+
+    <!-- 3x3 MATRIX -->
+    <div style="display: flex; align-items: center; gap: 12px; font-size: 1.15rem; font-weight: bold; padding: 2px 0;">
+      <span>det(A<sub>∖ 1, ∖ 1</sub>) =</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-norm">2</div><div class="c c-norm">1</div><div class="c c-norm">3</div></div>
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">2</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">3</div><div class="c c-norm">1</div><div class="c c-norm">2</div></div>
+        </div>
+      </div>
+      <span>=</span>
+    </div>
+
+    <!-- j = 1 -->
+    <div class="step-line">
+      <span class="op">+</span>
+      <span class="sign-box">(-1)<sup>1+1</sup></span>
+      <span class="op">·</span>
+      <span class="pivot-box">2</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row del-row">
+            <div class="c c-pivot">2</div>
+            <div class="c c-del">1</div>
+            <div class="c c-del">3</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">1</div>
+            <div class="c c-keep">2</div>
+            <div class="c c-keep">1</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">3</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">2</div>
+          </div>
+        </div>
+      </div>
+      <span class="arrow">═══════&gt;</span>
+      <span class="sign-box">+1</span>
+      <span class="op">·</span>
+      <span class="pivot-box">2</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-sub">2</div><div class="c c-sub">1</div></div>
+          <div class="m-row"><div class="c c-sub">1</div><div class="c c-sub">2</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- j = 2 -->
+    <div class="step-line">
+      <span class="op">+</span>
+      <span class="sign-box">(-1)<sup>2+1</sup></span>
+      <span class="op">·</span>
+      <span class="pivot-box">1</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row">
+            <div class="c c-del c-del-v">2</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">3</div>
+          </div>
+          <div class="m-row del-row">
+            <div class="c c-pivot">1</div>
+            <div class="c c-del">2</div>
+            <div class="c c-del">1</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">3</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">2</div>
+          </div>
+        </div>
+      </div>
+      <span class="arrow">═══════&gt;</span>
+      <span class="sign-box">-1</span>
+      <span class="op">·</span>
+      <span class="pivot-box">1</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-sub">1</div><div class="c c-sub">3</div></div>
+          <div class="m-row"><div class="c c-sub">1</div><div class="c c-sub">2</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- j = 3 -->
+    <div class="step-line">
+      <span class="op">+</span>
+      <span class="sign-box">(-1)<sup>3+1</sup></span>
+      <span class="op">·</span>
+      <span class="pivot-box">3</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row">
+            <div class="c c-del c-del-v">2</div>
+            <div class="c c-keep">1</div>
+            <div class="c c-keep">3</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">1</div>
+            <div class="c c-keep">2</div>
+            <div class="c c-keep">1</div>
+          </div>
+          <div class="m-row del-row">
+            <div class="c c-pivot">3</div>
+            <div class="c c-del">1</div>
+            <div class="c c-del">2</div>
+          </div>
+        </div>
+      </div>
+      <span class="arrow">═══════&gt;</span>
+      <span class="sign-box">+1</span>
+      <span class="op">·</span>
+      <span class="pivot-box">3</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-sub">1</div><div class="c c-sub">3</div></div>
+          <div class="m-row"><div class="c c-sub">2</div><div class="c c-sub">1</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEVEL n = 2 (BRANCH 1.1) -->
+  <div class="level-card l2">
+    <div class="level-header">
+      <span style="color: var(--d2);">⇓</span>
+      <span class="badge-n l2">n = 2</span>
+      <span class="op">⟶</span>
+      <span style="color: var(--d1); font-size: 1rem;">2 × [ n = 1 ]</span>
+    </div>
+
+    <!-- 2x2 MATRIX -->
+    <div style="display: flex; align-items: center; gap: 12px; font-size: 1.15rem; font-weight: bold; padding: 2px 0;">
+      <span>det</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-norm">2</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">2</div></div>
+        </div>
+      </div>
+      <span>=</span>
+    </div>
+
+    <!-- k = 1 -->
+    <div class="step-line">
+      <span class="op">+</span>
+      <span class="sign-box">(-1)<sup>1+1</sup></span>
+      <span class="op">·</span>
+      <span class="pivot-box">2</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row del-row">
+            <div class="c c-pivot">2</div>
+            <div class="c c-del">1</div>
+          </div>
+          <div class="m-row">
+            <div class="c c-del c-del-v">1</div>
+            <div class="c c-keep">2</div>
+          </div>
+        </div>
+      </div>
+      <span class="arrow">═══════&gt;</span>
+      <span class="sign-box">+1</span>
+      <span class="op">·</span>
+      <span class="pivot-box">2</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-sub">2</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- k = 2 -->
+    <div class="step-line">
+      <span class="op">+</span>
+      <span class="sign-box">(-1)<sup>2+1</sup></span>
+      <span class="op">·</span>
+      <span class="pivot-box">1</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row">
+            <div class="c c-del c-del-v">2</div>
+            <div class="c c-keep">1</div>
+          </div>
+          <div class="m-row del-row">
+            <div class="c c-pivot">1</div>
+            <div class="c c-del">2</div>
+          </div>
+        </div>
+      </div>
+      <span class="arrow">═══════&gt;</span>
+      <span class="sign-box">-1</span>
+      <span class="op">·</span>
+      <span class="pivot-box">1</span>
+      <span class="op">·</span>
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-sub">1</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEVEL n = 1 (BASE CASE) -->
+  <div class="level-card l1">
+    <div class="level-header">
+      <span style="color: var(--d1);">⊙</span>
+      <span class="badge-n l1">n = 1</span>
+      <span class="op">|</span>
+      <span>det([a]) = a</span>
+    </div>
+    <div class="calc-row">
+      <div class="det"><div class="m-table"><div class="m-row"><div class="c c-sub">2</div></div></div></div>
+      <span>= 2</span>
+      <span style="color: var(--muted); margin: 0 16px;">;</span>
+      <div class="det"><div class="m-table"><div class="m-row"><div class="c c-sub">1</div></div></div></div>
+      <span>= 1</span>
+    </div>
+  </div>
+
+  <!-- UNWINDING / RETURN STACK -->
+  <div class="level-card unwind">
+    <div class="level-header">
+      <span style="color: var(--up);">⇑</span>
+      <span class="badge-n up">n = 1 ⟶ n = 2</span>
+    </div>
+    <div class="calc-row">
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-norm">2</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">2</div></div>
+        </div>
+      </div>
+      <span>= (+1)·(2)·(2) + (-1)·(1)·(1) = 4 - 1 =</span>
+      <span class="badge-n l2">3</span>
+    </div>
+    <div class="calc-row">
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">3</div></div>
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">2</div></div>
+        </div>
+      </div>
+      <span>= (+1)·(1)·(2) + (-1)·(1)·(3) = 2 - 3 =</span>
+      <span class="badge-n l2">-1</span>
+    </div>
+    <div class="calc-row">
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">3</div></div>
+          <div class="m-row"><div class="c c-norm">2</div><div class="c c-norm">1</div></div>
+        </div>
+      </div>
+      <span>= (+1)·(1)·(1) + (-1)·(2)·(3) = 1 - 6 =</span>
+      <span class="badge-n l2">-5</span>
+    </div>
+
+    <div class="level-header" style="margin-top: 14px;">
+      <span style="color: var(--up);">⇑</span>
+      <span class="badge-n up">n = 2 ⟶ n = 3</span>
+    </div>
+    <div class="calc-row">
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-norm">2</div><div class="c c-norm">1</div><div class="c c-norm">3</div></div>
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">2</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">3</div><div class="c c-norm">1</div><div class="c c-norm">2</div></div>
+        </div>
+      </div>
+      <span>= (+1)·(2)·(3) + (-1)·(1)·(-1) + (+1)·(3)·(-5) = 6 + 1 - 15 =</span>
+      <span class="badge-n l3">-8</span>
+    </div>
+    <div class="calc-row">
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">3</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">2</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">3</div><div class="c c-norm">1</div><div class="c c-norm">2</div></div>
+        </div>
+      </div>
+      <span>= (+1)·(1)·(3) + (-1)·(1)·(5) + (+1)·(3)·(1) = 3 - 5 + 3 =</span>
+      <span class="badge-n l3">1</span>
+    </div>
+    <div class="calc-row">
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">3</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">2</div><div class="c c-norm">1</div><div class="c c-norm">3</div></div>
+          <div class="m-row"><div class="c c-norm">3</div><div class="c c-norm">1</div><div class="c c-norm">2</div></div>
+        </div>
+      </div>
+      <span>= (+1)·(1)·(-1) + (-1)·(2)·(5) + (+1)·(3)·(8) = -1 - 10 + 24 =</span>
+      <span class="badge-n l3">13</span>
+    </div>
+    <div class="calc-row">
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">3</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">2</div><div class="c c-norm">1</div><div class="c c-norm">3</div></div>
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">2</div><div class="c c-norm">1</div></div>
+        </div>
+      </div>
+      <span>= (+1)·(1)·(-5) + (-1)·(2)·(1) + (+1)·(1)·(8) = -5 - 2 + 8 =</span>
+      <span class="badge-n l3">1</span>
+    </div>
+
+    <div class="level-header" style="margin-top: 14px;">
+      <span style="color: var(--up);">⇑</span>
+      <span class="badge-n up">n = 3 ⟶ n = 4</span>
+    </div>
+    <div class="calc-row" style="font-size: 1.15rem; font-weight: bold; padding: 12px 16px;">
+      <div class="det">
+        <div class="m-table">
+          <div class="m-row"><div class="c c-norm">2</div><div class="c c-norm">1</div><div class="c c-norm">3</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">2</div><div class="c c-norm">1</div><div class="c c-norm">3</div></div>
+          <div class="m-row"><div class="c c-norm">3</div><div class="c c-norm">1</div><div class="c c-norm">2</div><div class="c c-norm">1</div></div>
+          <div class="m-row"><div class="c c-norm">1</div><div class="c c-norm">3</div><div class="c c-norm">1</div><div class="c c-norm">2</div></div>
+        </div>
+      </div>
+      <span>= (+1)·(2)·(-8) + (-1)·(1)·(1) + (+1)·(3)·(13) + (-1)·(1)·(1)</span>
+    </div>
+    <div class="calc-row" style="font-size: 1.3rem; font-weight: bold; justify-content: flex-end; padding: 12px 18px;">
+      <span>= -16 - 1 + 39 - 1 =</span>
+      <span class="badge-n l4" style="font-size: 1.35rem; padding: 4px 18px;">21</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
